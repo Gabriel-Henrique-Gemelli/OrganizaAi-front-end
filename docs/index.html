@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrganizAI</title>
+<meta name="description" content="OrganizAI — gestão de documentação e diário de obra para construção civil, com apoio de IA.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0E1012;
+    --panel: #14171A;
+    --hover: #191D21;
+    --orange: #FF5A1F;
+    --text-strong: #F4F2EF;
+    --text-mid: #C3C6CA;
+    --text-weak: #8B8F95;
+    --wire: #2A2D31;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-mid);
+    font-family: "Archivo", -apple-system, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .kicker {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  header {
+    border-bottom: 1px solid var(--wire);
+    position: sticky;
+    top: 0;
+    background: rgba(14, 16, 18, 0.92);
+    backdrop-filter: blur(6px);
+    z-index: 10;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 0;
+  }
+
+  .logo {
+    font-family: "Archivo", sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: 0.5px;
+    color: var(--text-strong);
+  }
+  .logo span { color: var(--orange); }
+
+  .nav-links {
+    display: flex;
+    gap: 28px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+  .nav-links a { text-decoration: none; }
+  .nav-links a:hover { color: var(--text-strong); }
+
+  @media (max-width: 640px) {
+    .nav-links { display: none; }
+  }
+
+  /* Hero */
+  .hero {
+    padding: 96px 0 72px;
+    border-bottom: 1px solid var(--wire);
+  }
+
+  .hero .kicker { margin-bottom: 20px; }
+
+  h1 {
+    font-family: "Archivo", sans-serif;
+    font-weight: 800;
+    font-size: clamp(2.2rem, 6vw, 4rem);
+    line-height: 1.05;
+    color: var(--text-strong);
+    margin: 0 0 24px;
+    letter-spacing: -0.5px;
+  }
+
+  .subhead {
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    color: var(--text-mid);
+    max-width: 640px;
+    margin: 0 0 40px;
+  }
+
+  .cta-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 15px 28px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn-primary {
+    background: var(--orange);
+    color: #17110B;
+    font-weight: 500;
+    border: 1px solid var(--orange);
+  }
+  .btn-primary:hover { background: #ff6c38; }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-strong);
+    border: 1px solid var(--wire);
+  }
+  .btn-secondary:hover { background: var(--hover); border-color: var(--text-weak); }
+
+  /* Sections */
+  section { padding: 72px 0; border-bottom: 1px solid var(--wire); }
+  section:last-of-type { border-bottom: none; }
+
+  .section-title {
+    font-family: "Archivo", sans-serif;
+    font-weight: 800;
+    font-size: clamp(1.5rem, 3.5vw, 2.2rem);
+    color: var(--text-strong);
+    margin: 12px 0 20px;
+  }
+
+  .lede {
+    max-width: 720px;
+    font-size: 1.05rem;
+    color: var(--text-mid);
+  }
+
+  /* Cards grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1px;
+    background: var(--wire);
+    border: 1px solid var(--wire);
+    margin-top: 40px;
+  }
+
+  .card {
+    background: var(--panel);
+    padding: 28px 24px;
+    transition: background 0.15s ease;
+  }
+  .card:hover { background: var(--hover); }
+
+  .card-index {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 1.6px;
+    color: var(--orange);
+    margin-bottom: 16px;
+  }
+
+  .card h3 {
+    font-family: "Archivo", sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text-strong);
+    margin: 0 0 10px;
+  }
+
+  .card p {
+    font-size: 0.92rem;
+    color: var(--text-weak);
+    margin: 0;
+  }
+
+  /* Note / TCC banner */
+  .note {
+    background: var(--panel);
+    border: 1px solid var(--wire);
+    border-left: 3px solid var(--orange);
+    padding: 20px 24px;
+    margin-top: 8px;
+    max-width: 720px;
+  }
+  .note p { margin: 0; color: var(--text-mid); font-size: 0.95rem; }
+
+  footer {
+    padding: 40px 0;
+  }
+
+  .footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .footer-row .logo { font-size: 15px; }
+
+  .footer-meta {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo">ORGANIZ<span>IA</span></div>
+    <nav class="nav-links">
+      <a href="#o-que-e">O que é</a>
+      <a href="#funcionalidades">Funcionalidades</a>
+      <a href="#projeto">Projeto</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap">
+    <div class="kicker">GESTÃO DE OBRA · DIÁRIO DIGITAL · IA</div>
+    <h1>FALE COM A OBRA.<br>A DOCUMENTAÇÃO SE ORGANIZA.</h1>
+    <p class="subhead">
+      OrganizAI é uma plataforma para empresas de construção civil gerenciarem diário de obra e
+      documentação técnica — com apoio de inteligência artificial do registro à conferência.
+    </p>
+    <div class="cta-row">
+      <a href="#projeto" class="btn btn-primary">Sobre o projeto</a>
+      <a href="#funcionalidades" class="btn btn-secondary">Ver funcionalidades</a>
+    </div>
+  </section>
+
+  <section id="o-que-e" class="wrap">
+    <div class="kicker">01 · O QUE É</div>
+    <h2 class="section-title">Um SaaS para documentação de obra</h2>
+    <p class="lede">
+      OrganizAI é uma plataforma SaaS voltada para empresas de construção civil organizarem a
+      documentação técnica e o diário de obra em um único lugar — com o apoio de inteligência
+      artificial para transcrever registros de voz, ler documentos e responder perguntas sobre o
+      andamento da obra.
+    </p>
+  </section>
+
+  <section id="funcionalidades" class="wrap">
+    <div class="kicker">02 · FUNCIONALIDADES</div>
+    <h2 class="section-title">O que a plataforma faz</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-index">01</div>
+        <h3>Diário de obra por voz</h3>
+        <p>Grava o relato em voz, transcreve automaticamente e corrige erros de reconhecimento
+        com apoio do Claude via Amazon Bedrock.</p>
+      </div>
+      <div class="card">
+        <div class="card-index">02</div>
+        <h3>Documentos e versões</h3>
+        <p>OCR de plantas, ARTs e relatórios técnicos, com controle de versão dos arquivos da
+        obra.</p>
+      </div>
+      <div class="card">
+        <div class="card-index">03</div>
+        <h3>Checklist de compliance</h3>
+        <p>Acompanhamento de ARTs, alvarás, licenças e certificados — com prazos e pendências
+        visíveis.</p>
+      </div>
+      <div class="card">
+        <div class="card-index">04</div>
+        <h3>Assistente com IA</h3>
+        <p>Pergunte sobre os documentos da obra e receba respostas com base no que já foi
+        registrado, via Claude na Amazon Bedrock.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="projeto" class="wrap">
+    <div class="kicker">03 · SOBRE O PROJETO</div>
+    <div class="note">
+      <p>OrganizAI é um projeto acadêmico (Trabalho de Conclusão de Curso) em desenvolvimento
+      ativo. Esta página é institucional e não representa um produto em produção.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <div class="footer-row">
+    <div class="logo">ORGANIZ<span>IA</span></div>
+    <div class="footer-meta">OrganizAI · 2026</div>
+  </div>
+</footer>
+
+</body>
+</html>
