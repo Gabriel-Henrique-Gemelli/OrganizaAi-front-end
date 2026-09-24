@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrganizAI — Gestão de Obra Inteligente</title>
+<meta name="description" content="OrganizAI — gestão de documentação e diário de obra para construção civil, com apoio de IA.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0E1012;
+    --panel: #14171A;
+    --hover: #191D21;
+    --orange: #FF5A1F;
+    --text-strong: #F4F2EF;
+    --text-mid: #C3C6CA;
+    --text-weak: #8B8F95;
+    --wire: #2A2D31;
+  }
+
+  * { 
+    box-sizing: border-box; 
+    margin: 0;
+    padding: 0;
+  }
+
+  html { 
+    scroll-behavior: smooth; 
+    scroll-padding-top: 100px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-mid);
+    font-family: "Archivo", -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .mono {
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: rgba(255, 90, 31, 0.08);
+    border: 1px solid rgba(255, 90, 31, 0.2);
+    border-radius: 100px;
+    color: var(--orange);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  a { 
+    color: inherit; 
+    text-decoration: none;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 5%;
+  }
+
+  header {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    border-bottom: 1px solid var(--wire);
+    background: rgba(14, 16, 18, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    z-index: 100;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 80px;
+  }
+
+  .logo {
+    font-weight: 800;
+    font-size: 24px;
+    letter-spacing: 0.5px;
+    color: var(--text-strong);
+  }
+  
+  .logo span { 
+    color: var(--orange); 
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 40px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+  
+  .nav-links a { 
+    transition: color 0.2s ease;
+  }
+  
+  .nav-links a:hover { 
+    color: var(--text-strong); 
+  }
+
+  .nav-cta {
+    display: inline-block;
+    padding: 10px 24px;
+    background: var(--text-strong);
+    color: var(--bg);
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+    border: none;
+    text-decoration: none;
+  }
+
+  .nav-cta:hover {
+    background: var(--orange);
+    color: #fff;
+    transform: translateY(-2px);
+  }
+
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+  }
+
+  .hero {
+    padding: 200px 0 120px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80vw;
+    height: 80vh;
+    background: radial-gradient(ellipse at top, rgba(255, 90, 31, 0.12) 0%, rgba(14,16,18,0) 70%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  h1 {
+    font-weight: 800;
+    font-size: clamp(3rem, 7vw, 5.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 32px;
+    color: var(--text-strong);
+    max-width: 900px;
+  }
+
+  h1 span {
+    background: linear-gradient(135deg, var(--text-strong) 0%, var(--text-weak) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subhead {
+    font-size: clamp(1.1rem, 2vw, 1.25rem);
+    color: var(--text-mid);
+    max-width: 700px;
+    margin: 0 auto 48px;
+    line-height: 1.6;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 18px 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-primary {
+    background: var(--orange);
+    color: #0E1012;
+    border: 1px solid var(--orange);
+    box-shadow: 0 4px 24px rgba(255, 90, 31, 0.25);
+  }
+  
+  .btn-primary:hover { 
+    background: #FF7340; 
+    border-color: #FF7340;
+    transform: translateY(-4px);
+    box-shadow: 0 8px 32px rgba(255, 90, 31, 0.4);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-strong);
+    border: 1px solid var(--wire);
+  }
+  
+  .btn-secondary:hover { 
+    background: var(--panel); 
+    border-color: var(--text-mid); 
+    transform: translateY(-4px);
+  }
+
+  section { 
+    padding: 120px 0; 
+    position: relative;
+  }
+
+  .section-header {
+    margin-bottom: 64px;
+    max-width: 700px;
+  }
+
+  .section-title {
+    font-weight: 800;
+    font-size: clamp(2rem, 4vw, 3rem);
+    color: var(--text-strong);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: 24px;
+  }
+
+  .section-desc {
+    font-size: 1.2rem;
+    color: var(--text-weak);
+    line-height: 1.7;
+  }
+
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 24px;
+  }
+
+  .bento-card {
+    background: var(--panel);
+    border: 1px solid var(--wire);
+    border-radius: 20px;
+    padding: 40px;
+    transition: all 0.4s ease;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .bento-card:hover {
+    background: var(--hover);
+    border-color: rgba(255, 90, 31, 0.3);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  .bento-card:nth-child(1) { grid-column: span 7; }
+  .bento-card:nth-child(2) { grid-column: span 5; }
+  .bento-card:nth-child(3) { grid-column: span 5; }
+  .bento-card:nth-child(4) { grid-column: span 7; }
+
+  @media (max-width: 900px) {
+    .bento-card:nth-child(n) { grid-column: span 12; }
+  }
+
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 90, 31, 0.1);
+    border: 1px solid rgba(255, 90, 31, 0.2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--orange);
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 24px;
+  }
+
+  .bento-card h3 {
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: var(--text-strong);
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+  }
+
+  .bento-card p {
+    font-size: 1.05rem;
+    color: var(--text-weak);
+    line-height: 1.6;
+    margin-top: auto;
+  }
+
+  .tcc-banner {
+    background: linear-gradient(135deg, var(--panel) 0%, rgba(255, 90, 31, 0.05) 100%);
+    border: 1px solid var(--wire);
+    border-radius: 20px;
+    padding: 64px;
+    text-align: center;
+    margin: 40px auto 120px;
+  }
+
+  .tcc-banner h3 {
+    font-size: 1.8rem;
+    color: var(--text-strong);
+    margin-bottom: 16px;
+  }
+
+  .tcc-banner p {
+    font-size: 1.15rem;
+    color: var(--text-mid);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  footer {
+    background: var(--panel);
+    border-top: 1px solid var(--wire);
+    padding: 80px 0 40px; 
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 60px;
+    margin-bottom: 64px;
+  }
+
+  .footer-brand p {
+    margin-top: 16px;
+    max-width: 300px;
+    color: var(--text-weak);
+    font-size: 15px;
+  }
+
+  .footer-col h4 {
+    font-weight: 700;
+    color: var(--text-strong);
+    margin-bottom: 24px;
+    font-size: 16px;
+  }
+
+  .footer-col ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .email-btn {
+    color: var(--text-weak);
+    font-size: 15px;
+    cursor: pointer;
+    transition: color 0.2s;
+    background: none;
+    border: none;
+    font-family: inherit;
+    text-align: left;
+    padding: 0;
+  }
+
+  .email-btn:hover {
+    color: var(--orange);
+  }
+
+  .footer-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 32px;
+    border-top: 1px solid var(--wire);
+    font-size: 14px;
+    color: var(--text-weak);
+  }
+
+  @media (max-width: 768px) {
+    .footer-grid {
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+    .tcc-banner {
+      padding: 40px 24px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo">ORGANIZ<span>AI</span></div>
+    <nav class="nav-links mono">
+      <a href="#o-que-e">A Plataforma</a>
+      <a href="#funcionalidades">Funcionalidades</a>
+      <a href="#projeto">O Projeto</a>
+    </nav>
+    <a href="#contato" class="nav-cta">Fale conosco</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap">
+    <div class="badge mono">Diário Digital Inteligente</div>
+    <h1>FALE COM A OBRA.<br><span>A DOCUMENTAÇÃO SE ORGANIZA.</span></h1>
+    <p class="subhead">
+      OrganizAI é a plataforma SaaS definitiva para a construção civil. Gerenciamos o seu diário de obra e documentação técnica com IA, do primeiro registro à conferência final.
+    </p>
+    <div class="btn-group">
+      <a href="#funcionalidades" class="btn btn-primary mono">Explorar Funcionalidades</a>
+      <a href="#projeto" class="btn btn-secondary mono">Sobre o Projeto</a>
+    </div>
+  </section>
+
+  <section id="o-que-e" class="wrap">
+    <div class="section-header">
+      <div class="badge mono">Plataforma SaaS</div>
+      <h2 class="section-title">Sua obra, controlada em um único lugar.</h2>
+      <p class="section-desc">
+        Apoiada por inteligência artificial, nossa plataforma transcreve registros de voz, lê documentos complexos e responde às suas perguntas sobre o andamento da obra em segundos.
+      </p>
+    </div>
+  </section>
+
+  <section id="funcionalidades" class="wrap">
+    <div class="section-header">
+      <div class="badge mono">Recursos</div>
+      <h2 class="section-title">Construído para escalar.</h2>
+    </div>
+
+    <div class="bento-grid">
+      <div class="bento-card">
+        <div class="card-icon mono">01</div>
+        <h3>Diário de obra por voz</h3>
+        <p>Grave o relato no canteiro de obras. Nossa IA transcreve tudo automaticamente e corrige erros técnicos de reconhecimento de voz com o apoio do modelo Claude via Amazon Bedrock.</p>
+      </div>
+      
+      <div class="bento-card">
+        <div class="card-icon mono">02</div>
+        <h3>Documentos e versões</h3>
+        <p>OCR inteligente de plantas, ARTs e relatórios técnicos. Mantenha o controle absoluto de todas as versões dos arquivos da obra.</p>
+      </div>
+
+      <div class="bento-card">
+        <div class="card-icon mono">03</div>
+        <h3>Assistente IA dedicado</h3>
+        <p>Faça perguntas naturais sobre os documentos da obra e receba respostas precisas com base no histórico já registrado.</p>
+      </div>
+
+      <div class="bento-card">
+        <div class="card-icon mono">04</div>
+        <h3>Checklist de Compliance</h3>
+        <p>Acompanhamento automatizado de ARTs, alvarás, licenças e certificados. Tenha visibilidade total de prazos e pendências antes que se tornem problemas.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="projeto" class="wrap">
+    <div class="tcc-banner">
+      <div class="badge mono">Status do Projeto</div>
+      <h3>Projeto Acadêmico em Desenvolvimento</h3>
+      <p>O OrganizAI é um Trabalho de Conclusão de Curso em desenvolvimento ativo. Esta landing page é institucional e demonstra o conceito da plataforma, não representando um produto atualmente em produção.</p>
+    </div>
+  </section>
+</main>
+
+<footer id="contato">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo">ORGANIZ<span>AI</span></div>
+        <p>Inteligência Artificial aplicada à gestão de documentação e diários na construção civil.</p>
+      </div>
+      
+      <div class="footer-col">
+        <h4>Plataforma</h4>
+        <ul>
+          <li><a href="#o-que-e">A Plataforma</a></li>
+          <li><a href="#funcionalidades">Funcionalidades</a></li>
+          <li><a href="#projeto">Sobre o Projeto</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Contato</h4>
+        <ul>
+          <li><button class="email-btn mono" onclick="copyEmail(this, 'gabriel@organizaii.com.br')">gabriel@organizaii.com.br</button></li>
+          <li><button class="email-btn mono" onclick="copyEmail(this, 'gustavo@organizaii.com.br')">gustavo@organizaii.com.br</button></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="copyright mono">
+        &copy; 2026 OrganizAI. Todos os direitos reservados.
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  function copyEmail(buttonElement, email) {
+    navigator.clipboard.writeText(email).then(() => {
+      const originalText = buttonElement.innerText;
+      buttonElement.innerText = "E-mail copiado!";
+      buttonElement.style.color = "var(--orange)";
+      
+      setTimeout(() => {
+        buttonElement.innerText = originalText;
+        buttonElement.style.color = "";
+      }, 2000);
+    }).catch(err => {
+      console.error('Erro ao copiar e-mail: ', err);
+    });
+  }
+</script>
+
+</body>
+</html>
