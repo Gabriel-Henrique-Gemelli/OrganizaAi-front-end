@@ -12,12 +12,3 @@ O **OrganizAI** é uma plataforma SaaS (Software as a Service) voltada para empr
 *   📄 **Gestão de Documentos (OCR):** Leitura inteligente de plantas, relatórios e ARTs, mantendo o controle absoluto de versões.
 *   🤖 **Assistente IA Dedicado:** Chatbot para responder perguntas sobre o andamento da obra com base no histórico já registrado.
 *   ✅ **Checklist de Compliance:** Acompanhamento de prazos, alvarás, licenças e certificados.
-
-## 🛠️ Tecnologias Utilizadas
-
-Nesta camada de interface (Landing Page), o projeto foi construído com foco em performance e design responsivo, utilizando:
-
-*   **HTML5** (Semântico e estruturado)
-*   **CSS3** (Variáveis nativas, CSS Grid, Flexbox, e efeitos de Glassmorphism)
-*   **JavaScript** (Interações de interface e utilitários)
-*   **Fontes:** Archivo (Títulos) e IBM Plex Mono (Detalhes técnicos e UI)
