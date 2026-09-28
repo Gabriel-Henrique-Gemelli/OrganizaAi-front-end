@@ -1,0 +1,42 @@
+name: organizai_flutter
+description: Gestão documental de obras em Flutter, integrada ao backend OrganizAI.
+publish_to: none
+version: 1.1.0+2
+environment:
+  sdk: '>=3.13.0 <4.0.0'
+  flutter: '>=3.47.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  dio: ^5.9.0
+  hive_ce_flutter: ^2.3.1
+  file_picker: ^10.3.3
+  cross_file: ^0.3.4+2
+  desktop_drop: ^0.7.0
+  image_picker: ^1.2.0
+  record: ^6.1.2
+  path_provider: ^2.1.5
+  flutter_svg: ^2.2.1
+  pdfrx: ^2.1.4
+  pdf: ^3.11.3
+  archive: ^4.0.7
+  crypto: ^3.0.6
+  intl: any
+  uuid: ^4.5.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo.ttf
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf

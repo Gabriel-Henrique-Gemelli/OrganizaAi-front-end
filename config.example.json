@@ -1,0 +1,5 @@
+{
+  "API_BASE_URL": "",
+  "COGNITO_ISSUER_URI": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_gdkHR3WCT",
+  "COGNITO_CLIENT_ID": "1v7oqsn5g97smst2hsrlhlhvep"
+}
