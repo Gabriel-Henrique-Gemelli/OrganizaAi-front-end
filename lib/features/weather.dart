@@ -31,14 +31,15 @@ class _DiaryWeatherState extends State<DiaryWeather> {
     super.dispose();
   }
 
-  Future<void> edit() async {
+  /// [suggestion] é o clima consultado automaticamente: o usuário confirma ou corrige antes de salvar.
+  Future<void> edit({Map<String, dynamic>? suggestion}) async {
     for (final c in inputs.values) {
       c.dispose();
     }
     inputs.clear();
     for (final k in labels.keys) {
       inputs[k] = TextEditingController(
-        text: '${widget.entry.weather[k] ?? ''}',
+        text: '${(suggestion ?? widget.entry.weather)[k] ?? ''}',
       );
     }
     String? error;
@@ -115,6 +116,17 @@ class _DiaryWeatherState extends State<DiaryWeather> {
                   set(() => error = 'Preencha ao menos um campo.');
                   return;
                 }
+                if (suggestion != null) {
+                  final corrected = labels.keys.any((k) {
+                    final a = suggestion[k], b = result[k];
+                    if (a is num && b is num) return a.toDouble() != b.toDouble();
+                    return a != b;
+                  });
+                  result['corrigidoPeloUsuario'] = corrected;
+                  if (!corrected) result['tokenConsulta'] = suggestion['tokenConsulta'];
+                } else {
+                  result['corrigidoPeloUsuario'] = true;
+                }
                 Navigator.pop(context, result);
               },
               child: Text('Salvar clima'),
@@ -182,12 +194,15 @@ class _DiaryWeatherState extends State<DiaryWeather> {
                   ? null
                   : () async {
                       setState(() => busy = true);
+                      Map<String, dynamic>? suggestion;
                       await runAction(
                         context,
-                        () => widget.store.retryWeather(e),
-                        success: 'Consulta solicitada. Atualize o registro em alguns instantes.',
+                        () async =>
+                            suggestion = await widget.store.fetchWeather(e),
                       );
                       if (mounted) setState(() => busy = false);
+                      if (suggestion != null && mounted)
+                        await edit(suggestion: suggestion);
                     },
               child: Text('CONSULTAR CLIMA AUTOMÁTICO'),
             ),

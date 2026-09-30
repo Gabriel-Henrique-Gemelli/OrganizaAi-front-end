@@ -4,7 +4,6 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: '',
   );
-  static const wavEnabled = true;
   static const cognitoIssuer = String.fromEnvironment(
     'COGNITO_ISSUER_URI',
     defaultValue:
@@ -32,7 +31,6 @@ class AppConfig {
     'ogg': 'audio/ogg',
     'opus': 'audio/ogg',
     'webm': 'audio/webm',
-    'wav': 'audio/wav',
   };
   static String extension(String name) => name.split('.').last.toLowerCase();
   static int maxBytes(String name) =>

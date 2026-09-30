@@ -29,7 +29,6 @@ Future<void> projectDialog(
   final fields = {
     for (final key in [
       'name',
-      'code',
       'city',
       'state',
       'address',
@@ -60,137 +59,157 @@ Future<void> projectDialog(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final field in {
-                    'name': 'Nome da obra *',
-                    'code': 'Código interno',
-                    'city': 'Cidade *',
-                    'state': 'UF *',
-                    'address': 'Endereço *',
-                    'contractor': 'Contratante',
-                    'executor': 'Executora *',
-                    'responsible': 'Responsável técnico *',
-                    'registration': 'Registro profissional',
-                  }.entries)
-                    FieldLabel(
-                      field.value,
-                      child: TextFormField(
-                        controller: fields[field.key],
-                        enabled: !saving,
-                        textCapitalization: field.key == 'state'
-                            ? TextCapitalization.characters
-                            : TextCapitalization.sentences,
-                        maxLength: switch (field.key) {
-                          'state' => 2,
-                          'code' || 'registration' => 80,
-                          'city' => 120,
-                          'address' => 400,
-                          _ => 200,
-                        },
-                        decoration: InputDecoration(counterText: ''),
-                        validator: (v) {
-                          if (field.value.endsWith('*') &&
-                              (v == null || v.trim().isEmpty))
-                            return 'Campo obrigatório';
-                          if (field.key == 'state' &&
-                              !RegExp(r'^[A-Za-z]{2}$')
-                                  .hasMatch(v?.trim() ?? ''))
-                            return 'Use a sigla da UF';
-                          return null;
-                        },
-                      ),
-                    ),
                   FieldLabel(
-                    'Tipo de obra',
-                    child: DropdownButtonFormField<String>(
-                      initialValue: type,
-                      items: projectTypes.entries
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e.key,
-                              child: Text(e.value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: saving ? null : (v) => type = v!,
+                    'Nome da obra *',
+                    child: TextFormField(
+                      controller: fields['name'],
+                      enabled: !saving,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLength: 200,
+                      decoration: InputDecoration(counterText: ''),
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? 'Campo obrigatório'
+                          : null,
                     ),
                   ),
-                  FieldLabel(
-                    'Situação',
-                    child: DropdownButtonFormField<String>(
-                      initialValue: status,
-                      items: projectStatuses.entries
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e.key,
-                              child: Text(e.value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: saving ? null : (v) => status = v!,
-                    ),
-                  ),
-                  for (final field in {
-                    'plannedStartDate': 'Início previsto *',
-                    'plannedEndDate': 'Término previsto *',
-                  }.entries)
-                    FieldLabel(
-                      field.value,
-                      child: TextFormField(
-                        controller: fields[field.key],
-                        readOnly: true,
-                        enabled: !saving,
-                        decoration: InputDecoration(
-                          hintText: 'Selecione a data',
-                          suffixIcon: Icon(Icons.calendar_month),
-                        ),
-                        validator: (v) => DateTime.tryParse(v ?? '') == null
-                            ? 'Selecione a data'
-                            : null,
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: c,
-                            initialDate:
-                                DateTime.tryParse(fields[field.key]!.text) ??
-                                DateTime.now(),
-                            firstDate: DateTime(1900),
-                            lastDate: DateTime(2100),
-                          );
-                          if (date != null)
-                            fields[field.key]!.text = date
-                                .toIso8601String()
-                                .substring(0, 10);
-                        },
-                      ),
-                    ),
                   Notice(
-                    'As coordenadas são opcionais e permitem consultar o clima da obra.',
+                    'O identificador da obra é gerado pelo sistema. Executora e responsável técnico usam a organização e o seu usuário quando ficam em branco.',
                   ),
-                  SizedBox(height: 12),
-                  for (final field in {
-                    'latitude': 'Latitude',
-                    'longitude': 'Longitude',
-                  }.entries)
-                    FieldLabel(
-                      field.value,
-                      child: TextFormField(
-                        controller: fields[field.key],
-                        enabled: !saving,
-                        keyboardType: TextInputType.numberWithOptions(
-                          signed: true,
-                          decimal: true,
+                  ExpansionTile(
+                    title: Text('Mais detalhes (opcional)'),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: EdgeInsets.zero,
+                    children: [
+                      for (final field in {
+                        'city': 'Cidade',
+                        'state': 'UF',
+                        'address': 'Endereço',
+                        'contractor': 'Contratante',
+                        'executor': 'Executora',
+                        'responsible': 'Responsável técnico',
+                        'registration': 'Registro profissional',
+                      }.entries)
+                        FieldLabel(
+                          field.value,
+                          child: TextFormField(
+                            controller: fields[field.key],
+                            enabled: !saving,
+                            textCapitalization: field.key == 'state'
+                                ? TextCapitalization.characters
+                                : TextCapitalization.sentences,
+                            maxLength: switch (field.key) {
+                              'state' => 2,
+                              'registration' => 60,
+                              'city' => 120,
+                              'address' => 300,
+                              _ => 200,
+                            },
+                            decoration: InputDecoration(counterText: ''),
+                            validator: (v) =>
+                                field.key == 'state' &&
+                                    (v ?? '').trim().isNotEmpty &&
+                                    !RegExp(r'^[A-Za-z]{2}$')
+                                        .hasMatch(v!.trim())
+                                ? 'Use a sigla da UF'
+                                : null,
+                          ),
                         ),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return null;
-                          final value = double.tryParse(v.replaceAll(',', '.'));
-                          final max = field.key == 'latitude' ? 90 : 180;
-                          return value == null ||
-                                  !value.isFinite ||
-                                  value.abs() > max
-                              ? 'Coordenada inválida'
-                              : null;
-                        },
+                      FieldLabel(
+                        'Tipo de obra',
+                        child: DropdownButtonFormField<String>(
+                          initialValue: type,
+                          items: projectTypes.entries
+                              .map(
+                                (e) => DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(e.value),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: saving ? null : (v) => type = v!,
+                        ),
                       ),
-                    ),
+                      FieldLabel(
+                        'Situação',
+                        child: DropdownButtonFormField<String>(
+                          initialValue: status,
+                          items: projectStatuses.entries
+                              .map(
+                                (e) => DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(e.value),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: saving ? null : (v) => status = v!,
+                        ),
+                      ),
+                      for (final field in {
+                        'plannedStartDate': 'Início previsto',
+                        'plannedEndDate': 'Término previsto',
+                      }.entries)
+                        FieldLabel(
+                          field.value,
+                          child: TextFormField(
+                            controller: fields[field.key],
+                            readOnly: true,
+                            enabled: !saving,
+                            decoration: InputDecoration(
+                              hintText: 'Selecione a data',
+                              suffixIcon: Icon(Icons.calendar_month),
+                            ),
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: c,
+                                initialDate:
+                                    DateTime.tryParse(
+                                      fields[field.key]!.text,
+                                    ) ??
+                                    DateTime.now(),
+                                firstDate: DateTime(1900),
+                                lastDate: DateTime(2100),
+                              );
+                              if (date != null)
+                                fields[field.key]!.text = date
+                                    .toIso8601String()
+                                    .substring(0, 10);
+                            },
+                          ),
+                        ),
+                      Notice(
+                        'As coordenadas permitem consultar o clima automático da obra.',
+                      ),
+                      SizedBox(height: 12),
+                      for (final field in {
+                        'latitude': 'Latitude',
+                        'longitude': 'Longitude',
+                      }.entries)
+                        FieldLabel(
+                          field.value,
+                          child: TextFormField(
+                            controller: fields[field.key],
+                            enabled: !saving,
+                            keyboardType: TextInputType.numberWithOptions(
+                              signed: true,
+                              decimal: true,
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return null;
+                              final value = double.tryParse(
+                                v.replaceAll(',', '.'),
+                              );
+                              final max = field.key == 'latitude' ? 90 : 180;
+                              return value == null ||
+                                      !value.isFinite ||
+                                      value.abs() > max
+                                  ? 'Coordenada inválida'
+                                  : null;
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -213,7 +232,7 @@ Future<void> projectDialog(
                         Project(
                           id: existing?.id ?? '',
                           name: value('name'),
-                          code: value('code'),
+                          code: existing?.code ?? '',
                           city: value('city'),
                           state: value('state').toUpperCase(),
                           address: value('address'),

@@ -187,6 +187,8 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  /// As obras vêm do servidor. Documentos e diários ficam no cache local: aqui só se retoma a consulta
+  /// do que ainda está em processamento (leitura de documento e transcrição).
   Future<void> synchronize() async {
     require(true);
     if (working) throw ApiFailure('Aguarde o fim da operação para atualizar.');
@@ -198,66 +200,35 @@ class AppStore extends ChangeNotifier {
       final freshProjects = (await api.listAll('/api/obras'))
           .map(Project.fromJson)
           .toList();
-      final freshDocs = <DocumentRecord>[], freshDiaries = <DiaryEntry>[];
-      for (final p in freshProjects) {
-        final docs = await api.listAll('/api/obras/${p.id}/documentos');
-        freshDocs.addAll(docs.map(DocumentRecord.fromJson));
-        if (canDiary)
-          freshDiaries.addAll(
-            (await api.listAll('/api/obras/${p.id}/diarios'))
-                .map(DiaryEntry.fromJson),
-          );
-      }
       if (session != current) return;
-      final validProjects = freshProjects.map((p) => p.id).toSet();
-      final oldDocs = {
-        for (final d in documents)
-          if (d.remoteId != null) d.remoteId!: d,
-      };
-      for (final d in freshDocs) {
-        final old = oldDocs[d.remoteId];
-        if (old != null) {
-          if (old.versionId == d.versionId) {
-            d.id = old.id;
-            if (d.size == 0 && old.size > 0) d.size = old.size;
-            if (!d.confirmed) {
-              d.uploaded = old.uploaded;
-              d.confirmed = old.confirmed;
-              d.hash = old.hash;
-            }
-          } else {
-            d.id = uuid.v4();
-          }
-        }
-      }
-      freshDocs.addAll(
-        documents.where(
-          (d) => d.remoteId == null && validProjects.contains(d.projectId),
-        ),
-      );
-      final oldDiaries = {
-        for (final d in diaries)
-          if (d.remoteId != null) d.remoteId!: d,
-      };
-      for (final d in freshDiaries) {
-        final old = oldDiaries[d.remoteId];
-        if (old != null) {
-          d.id = old.id;
-          if (old.details['Arquivo de áudio'] != null)
-            d.details['Arquivo de áudio'] = old.details['Arquivo de áudio']!;
-        }
-      }
-      if (canDiary)
-        freshDiaries.addAll(
-          diaries.where(
-            (d) => d.remoteId == null && validProjects.contains(d.projectId),
-          ),
-        );
       projects = freshProjects;
-      documents = freshDocs;
-      diaries = freshDiaries;
-      if (!validProjects.contains(selectedProjectId))
+      if (!projects.any((p) => p.id == selectedProjectId))
         selectedProjectId = projects.firstOrNull?.id ?? '';
+      for (final d in documents.where(
+        (d) => d.remoteId != null && d.confirmed && d.status == 'AGUARDANDO_OCR',
+      )) {
+        try {
+          final j = await api.result(d.remoteId!);
+          if (session != current) return;
+          _applyOcr(d, j);
+          d.updated = DateTime.now();
+        } on ApiFailure catch (e) {
+          d.message = e.toString();
+        }
+      }
+      for (final e in diaries.where(
+        (e) =>
+            e.remoteId != null &&
+            {'GRAVADO', 'EM_TRANSCRICAO'}.contains(e.status),
+      )) {
+        try {
+          final j = await api.result(e.remoteId!, audio: true);
+          if (session != current) return;
+          _applyDiary(e, j);
+        } on ApiFailure catch (err) {
+          e.message = err.toString();
+        }
+      }
       lastSync = DateTime.now();
       await persist();
     } catch (e) {
@@ -358,6 +329,8 @@ class AppStore extends ChangeNotifier {
     await persist();
   }
 
+  /// Cria ou edita a obra no servidor: o ID é gerado pelo banco, e executora e responsável, quando
+  /// vazios, vêm da organização e do usuário logado.
   Future<void> saveProject(Project p) => _during(() async {
     require(canManageProjects);
     final saved = Project.fromJson(
@@ -476,6 +449,7 @@ class AppStore extends ChangeNotifier {
         receipt = await api.prepareDocument(
           d.name,
           d.projectId,
+          d.size,
           cancel: cancel,
         );
         d.remoteId = receipt['documentoId'];
@@ -570,22 +544,12 @@ class AppStore extends ChangeNotifier {
     require(canApprove);
     if (d.remoteId == null || d.versionId == null)
       throw ApiFailure('Aguarde a leitura do documento.');
-    final saved = DocumentRecord.fromJson(
-      await api.request(
-        'PATCH',
-        '/api/documentos/${d.remoteId}/revisao',
-        data: {
-          'versionId': d.versionId,
-          'category': category,
-          'fields': fields,
-        },
-      ),
-    );
-    d.category = saved.category;
-    d.reviewed = saved.reviewed;
-    d.reviewedBy = saved.reviewedBy;
-    d.fields = saved.fields;
-    d.updated = saved.updated;
+    // O servidor ainda não guarda a conferência: ela vale neste aparelho.
+    d.category = category;
+    d.fields = fields;
+    d.reviewed = true;
+    d.reviewedBy = userName;
+    d.updated = DateTime.now();
     log('Conferência salva', d.name);
     await persist();
   });
@@ -594,16 +558,9 @@ class AppStore extends ChangeNotifier {
     require(true);
     final cached = bytes(d.id);
     if (cached != null) return cached;
-    if (d.remoteId == null)
-      throw ApiFailure('O original ainda não foi enviado.');
-    final expected = session;
-    final downloaded = await api.downloadOriginal(d.remoteId!);
-    if (session != expected)
-      throw ApiFailure('Entre novamente para continuar.');
-    await cache(d.id, downloaded);
-    d.size = downloaded.length;
-    notifyListeners();
-    return downloaded;
+    throw ApiFailure(
+      'O original só está disponível no aparelho que fez o envio.',
+    );
   });
 
   Future<DiaryEntry> addDiary(
@@ -622,7 +579,7 @@ class AppStore extends ChangeNotifier {
     if (type == null ||
         audio.bytes.isEmpty ||
         audio.bytes.length > 120 * 1024 * 1024)
-      throw ApiFailure('Envie um áudio OGG, WEBM ou WAV de até 120 MB.');
+      throw ApiFailure('Envie um áudio OGG ou WEBM de até 120 MB.');
     final e = DiaryEntry(
       id: uuid.v4(),
       projectId: selectedProjectId,
@@ -644,6 +601,7 @@ class AppStore extends ChangeNotifier {
         e.projectId,
         date.toIso8601String().substring(0, 10),
         e.role,
+        audio.bytes.length,
         cancel: cancel,
       );
       e.remoteId = signed['diarioId'];
@@ -652,7 +610,9 @@ class AppStore extends ChangeNotifier {
       await api.putSigned(signed, audio.bytes, cancel: cancel);
       e.status = 'EM_TRANSCRICAO';
       await persist();
-      final j = await api.poll(e.remoteId!, audio: true, cancel: cancel);
+      var j = await api.confirmDiary(e.remoteId!, cancel: cancel);
+      if ({'GRAVADO', 'EM_TRANSCRICAO'}.contains(j['status']))
+        j = await api.poll(e.remoteId!, audio: true, cancel: cancel);
       _applyDiary(e, j);
       log('Áudio registrado', e.author);
     } catch (err) {
@@ -725,11 +685,7 @@ class AppStore extends ChangeNotifier {
     {
       if (e.remoteId == null)
         throw ApiFailure('O diário ainda não foi enviado.');
-      final edited = await api.editDiary(
-        e.remoteId!,
-        text.trim(),
-        fields: details,
-      );
+      final edited = await api.editDiary(e.remoteId!, text.trim());
       e.edited = edited['transcriptEdited'] ?? text.trim();
       e.status = edited['status'] ?? e.status;
       e.weather = Map<String, dynamic>.from(edited['clima'] ?? {});
@@ -760,13 +716,12 @@ class AppStore extends ChangeNotifier {
     await persist();
   }
 
-  Future<void> retryWeather(DiaryEntry e) => _during(() => _retryWeather(e));
-  Future<void> _retryWeather(DiaryEntry e) async {
+  /// Consulta o clima automático da obra. Não grava: a tela mostra os valores para o usuário confirmar
+  /// ou corrigir, e só então [updateWeather] envia (com o `tokenConsulta` se nada mudou).
+  Future<Map<String, dynamic>> fetchWeather(DiaryEntry e) => _during(() async {
     require(canDiary);
-    if (e.remoteId == null)
-      throw ApiFailure('A consulta automática requer um diário no servidor.');
-    await api.retryWeather(e.remoteId!);
-  }
+    return api.consultWeather(e.projectId);
+  });
 
   Future<void> newConversation() async {
     if (busyChat) return;

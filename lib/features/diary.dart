@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
@@ -66,7 +67,7 @@ class _DiaryPageState extends State<DiaryPage> {
         );
       await recorder!.start(
         RecordConfig(
-          encoder: AudioEncoder.wav,
+          encoder: AudioEncoder.opus,
           sampleRate: 16000,
           numChannels: 1,
         ),
@@ -98,7 +99,7 @@ class _DiaryPageState extends State<DiaryPage> {
       if (!mounted) return;
       await submit(
         PickedAsset(
-          'diario-${DateTime.now().millisecondsSinceEpoch}.wav',
+          'diario-${DateTime.now().millisecondsSinceEpoch}.${kIsWeb ? 'webm' : 'ogg'}',
           data,
         ),
       );
@@ -119,7 +120,7 @@ class _DiaryPageState extends State<DiaryPage> {
   }
 
   Future<void> importAudio() async => runAction(context, () async {
-    final extensions = ['ogg', 'opus', 'webm', 'wav'];
+    final extensions = ['ogg', 'opus', 'webm'];
     final selected = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: extensions,
@@ -294,7 +295,7 @@ class _DiaryPageState extends State<DiaryPage> {
                           onPressed: () => runAction(
                             context,
                             () => saveBytes(
-                              entry.details['Arquivo de áudio'] ?? 'diario.wav',
+                              entry.details['Arquivo de áudio'] ?? 'diario.ogg',
                               store.bytes(entry.id)!,
                             ),
                           ),

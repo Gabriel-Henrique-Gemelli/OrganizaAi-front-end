@@ -46,7 +46,9 @@ void main() {
       adapter.requests.single.headers['X-Amz-Target'],
       'AWSCognitoIdentityProviderService.GetUser',
     );
-    expect(adapter.requests.single.data, {'AccessToken': access});
+    expect(jsonDecode(adapter.requests.single.data as String), {
+      'AccessToken': access,
+    });
     auth.close();
   });
   test('ID token, cliente diferente e token expirado são recusados', () async {
@@ -87,6 +89,74 @@ void main() {
     );
     await expectLater(auth.login('user', 'test-password'), throwsException);
     expect(adapter.requests, isEmpty);
+    auth.close();
+  });
+  test('Login usa SRP: a senha nunca é enviada ao Cognito', () async {
+    const password = 'senha-que-nao-pode-vazar';
+    final access = token();
+    final adapter = FakeAdapter((r) async {
+      final target = r.headers['X-Amz-Target'] as String;
+      if (target.endsWith('.InitiateAuth')) {
+        return jsonResponse({
+          'ChallengeName': 'PASSWORD_VERIFIER',
+          'ChallengeParameters': {
+            'USER_ID_FOR_SRP': 'usuario-teste',
+            'SALT': 'abcdef0123456789abcdef0123456789',
+            'SRP_B': '1234567890abcdef1234567890abcdef1234567890abcdef',
+            'SECRET_BLOCK': base64.encode(utf8.encode('bloco-secreto')),
+          },
+        });
+      }
+      if (target.endsWith('.RespondToAuthChallenge')) {
+        return jsonResponse({
+          'AuthenticationResult': {'AccessToken': access, 'RefreshToken': 'r'},
+        });
+      }
+      return jsonResponse({
+        'Username': 'Marina',
+        'UserAttributes': [
+          {'Name': 'sub', 'Value': 'usuario'},
+        ],
+      });
+    });
+    final auth = CognitoAuth(
+      issuer,
+      'client',
+      client: Dio()..httpClientAdapter = adapter,
+    );
+    final result = await auth.login('teste@organizai.dev', password);
+    expect(result, isA<AuthSession>());
+    expect(adapter.requests.map((r) => r.headers['X-Amz-Target']), [
+      'AWSCognitoIdentityProviderService.InitiateAuth',
+      'AWSCognitoIdentityProviderService.RespondToAuthChallenge',
+      'AWSCognitoIdentityProviderService.GetUser',
+    ]);
+    final first = jsonDecode(adapter.requests[0].data as String) as Map;
+    expect(first['AuthFlow'], 'USER_SRP_AUTH');
+    expect((first['AuthParameters'] as Map).containsKey('SRP_A'), true);
+    final second = jsonDecode(adapter.requests[1].data as String) as Map;
+    expect(second['ChallengeName'], 'PASSWORD_VERIFIER');
+    expect((second['ChallengeResponses'] as Map)['USERNAME'], 'usuario-teste');
+    for (final r in adapter.requests) {
+      expect('${r.data}'.contains(password), false);
+    }
+    auth.close();
+  });
+  test('Erro do Cognito em texto é interpretado, não vira falha de conexão', () async {
+    final adapter = FakeAdapter(
+      (_) async => jsonResponse('{"__type":"NotAuthorizedException"}', 400),
+    );
+    final auth = CognitoAuth(
+      issuer,
+      'client',
+      client: Dio()..httpClientAdapter = adapter,
+    );
+    await expectLater(
+      auth.login('a@b.c', 'x'),
+      throwsA(
+        predicate((e) => '$e'.contains('Acesso não autorizado')),
+      ),
+    );
     auth.close();
   });
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import 'api_client.dart';
+import 'srp.dart';
 
 /// Tokens vivem apenas na memória; nenhuma senha, chave AWS ou client secret é salva.
 class AuthSession {
@@ -65,9 +66,10 @@ class CognitoAuth {
   ) async {
     final url = endpoint.toString();
     try {
+      // O Dio só serializa Map quando o content-type é application/json; o Cognito usa x-amz-json-1.1.
       final r = await http.post(
         url,
-        data: body,
+        data: jsonEncode(body),
         options: Options(
           headers: {
             'Content-Type': 'application/x-amz-json-1.1',
@@ -75,9 +77,15 @@ class CognitoAuth {
           },
         ),
       );
-      return Map<String, dynamic>.from(r.data as Map);
+      final decoded = r.data is String ? jsonDecode(r.data as String) : r.data;
+      return Map<String, dynamic>.from(decoded as Map);
     } on DioException catch (e) {
-      final j = e.response?.data;
+      var j = e.response?.data;
+      if (j is String) {
+        try {
+          j = jsonDecode(j);
+        } catch (_) {}
+      }
       final code = j is Map ? '${j['__type']}'.split('#').last : '';
       throw ApiFailure(switch (code) {
         'NotAuthorizedException' || 'UserNotFoundException' =>
@@ -99,14 +107,35 @@ class CognitoAuth {
     }
   }
 
-  Future<Object> login(String username, String password) async => _resolve(
-    await call('InitiateAuth', {
+  /// Entra por SRP: o Cognito nunca recebe a senha, só a prova calculada aqui.
+  Future<Object> login(String username, String password) async {
+    endpoint; // recusa emissor inválido antes de qualquer envio
+    final srp = CognitoSrp(issuer.split('_').last);
+    final first = await call('InitiateAuth', {
       'ClientId': clientId,
-      'AuthFlow': 'USER_PASSWORD_AUTH',
-      'AuthParameters': {'USERNAME': username, 'PASSWORD': password},
-    }),
-    username,
-  );
+      'AuthFlow': 'USER_SRP_AUTH',
+      'AuthParameters': {'USERNAME': username, 'SRP_A': srp.publicAHex},
+    });
+    if (first['ChallengeName'] != 'PASSWORD_VERIFIER') {
+      return _resolve(first, username);
+    }
+    final p = Map<String, dynamic>.from(first['ChallengeParameters'] ?? {});
+    final userId = p['USER_ID_FOR_SRP'] ?? username;
+    return _resolve(
+      await call('RespondToAuthChallenge', {
+        'ClientId': clientId,
+        'ChallengeName': 'PASSWORD_VERIFIER',
+        'ChallengeResponses': srp.respond(
+          userId: userId,
+          password: password,
+          saltHex: p['SALT'],
+          srpBHex: p['SRP_B'],
+          secretBlock: p['SECRET_BLOCK'],
+        ),
+      }),
+      userId,
+    );
+  }
 
   Future<Object> respond(
     AuthChallenge c,

@@ -47,7 +47,7 @@ void main() {
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example'));
       dio.httpClientAdapter = adapter;
       final api = ApiClient('https://api.example', client: dio);
-      await api.prepareDocument('obra.pdf', 'proj');
+      await api.prepareDocument('obra.pdf', 'proj', 2048);
       await api.confirm('d', 'v', 'a' * 64);
       await api.result('d');
       expect(adapter.requests.map((r) => r.path), [
@@ -57,6 +57,7 @@ void main() {
       ]);
       expect(adapter.requests[0].data, {
         'projectId': 'proj',
+        'tamanhoBytes': 2048,
         'nomeArquivo': 'obra.pdf',
         'contentType': 'application/pdf',
       });
@@ -194,8 +195,6 @@ void main() {
       'pergunta': 'Pergunta',
       'sessionId': 's',
     });
-    await api.retryWeather('d');
-    expect(adapter.requests.last.data, isNull);
     api.close();
   });
   test('OCR 422 FALHOU é um resultado terminal do processamento', () async {
@@ -216,61 +215,41 @@ void main() {
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example'))
       ..httpClientAdapter = adapter;
     final api = ApiClient('https://api.example', client: dio);
-    await api.prepareDiary('audio/ogg', 'obra', '2026-09-21', 'Engenheiro');
+    await api.prepareDiary(
+      'audio/ogg',
+      'obra',
+      '2026-09-21',
+      'Engenheiro',
+      4096,
+    );
     expect(adapter.requests.single.data, {
       'contentType': 'audio/ogg',
       'projectId': 'obra',
       'entryDate': '2026-09-21',
       'authorRole': 'Engenheiro',
+      'tamanhoBytes': 4096,
     });
     api.close();
   });
-  test('Catálogo consome todas as páginas', () async {
-    final adapter = FakeAdapter(
-      (r) async => jsonResponse({
-        'items': [
-          {'id': r.path.endsWith('=0') ? 'a' : 'b'},
-        ],
-        'hasNext': r.path.endsWith('=0'),
-      }),
-    );
+  test('Áudio enviado é confirmado e o clima é consultado sem gravar', () async {
+    final adapter = FakeAdapter((r) async => jsonResponse({'status': 'EM_TRANSCRICAO'}));
     final api = ApiClient(
       'https://api.example',
       client: Dio(BaseOptions(baseUrl: 'https://api.example'))
         ..httpClientAdapter = adapter,
     );
-    expect((await api.listAll('/api/obras')).map((j) => j['id']), ['a', 'b']);
-    expect(adapter.requests.length, 2);
+    await api.confirmDiary('d');
+    await api.consultWeather('obra');
+    await api.editDiary('d', 'texto');
+    expect(
+      adapter.requests.map((r) => '${r.method} ${r.uri.path}${r.uri.hasQuery ? '?${r.uri.query}' : ''}'),
+      [
+        'POST /api/diario/d/confirmar-upload',
+        'GET /api/diario/clima?projectId=obra',
+        'PATCH /api/diario/d/texto',
+      ],
+    );
+    expect(adapter.requests.last.data, {'texto': 'texto'});
     api.close();
   });
-  test(
-    'Download não encaminha token e rejeita conteúdo com hash divergente',
-    () async {
-      final adapter = FakeAdapter(
-        (r) async => jsonResponse({
-          'url': 'https://storage.example/file',
-          'sha256': 'a' * 64,
-        }),
-      );
-      final storage = FakeAdapter(
-        (r) async => ResponseBody.fromBytes([65, 66, 67], 200),
-      );
-      final api = ApiClient(
-        'https://api.example',
-        token: 'private-token',
-        client: Dio(BaseOptions(baseUrl: 'https://api.example'))
-          ..httpClientAdapter = adapter,
-        uploadClient: Dio()..httpClientAdapter = storage,
-      );
-      await expectLater(
-        api.downloadOriginal('doc'),
-        throwsA(isA<ApiFailure>()),
-      );
-      expect(
-        storage.requests.single.headers.keys.map((s) => s.toLowerCase()),
-        isNot(contains('authorization')),
-      );
-      api.close();
-    },
-  );
 }

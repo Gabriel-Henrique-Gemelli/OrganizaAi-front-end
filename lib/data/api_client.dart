@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:crypto/crypto.dart';
 
 import '../core/config.dart';
 
@@ -75,6 +74,8 @@ class ApiClient {
         403 => 'Acesso recusado pelo servidor.',
         404 => 'Este registro não está disponível para sua conta.',
         409 => 'Este registro já existe ou foi alterado. Atualize os dados antes de repetir.',
+        413 => 'O arquivo é maior do que o servidor aceita.',
+        415 => 'O servidor não aceita este formato de arquivo.',
         429 => 'Muitas solicitações. Aguarde antes de tentar novamente.',
         _ => 'Não foi possível acessar o serviço. Confira sua conexão e tente novamente.',
       }, e.response?.statusCode);
@@ -83,7 +84,8 @@ class ApiClient {
 
   Future<Map<String, dynamic>> prepareDocument(
     String name,
-    String project, {
+    String project,
+    int size, {
     CancelToken? cancel,
   }) => request(
     'POST',
@@ -92,6 +94,7 @@ class ApiClient {
       'nomeArquivo': name,
       'contentType': AppConfig.documentTypes[AppConfig.extension(name)],
       'projectId': project,
+      'tamanhoBytes': size,
     },
     cancel: cancel,
   );
@@ -99,7 +102,8 @@ class ApiClient {
     String type,
     String project,
     String date,
-    String role, {
+    String role,
+    int size, {
     CancelToken? cancel,
   }) => request(
     'POST',
@@ -109,6 +113,7 @@ class ApiClient {
       'projectId': project,
       'entryDate': date,
       'authorRole': role,
+      'tamanhoBytes': size,
     },
     cancel: cancel,
   );
@@ -159,6 +164,9 @@ class ApiClient {
     data: {'sha256': hash},
     cancel: cancel,
   );
+  /// Avisa o servidor que o áudio já está no armazenamento; ele confere o arquivo e inicia a transcrição.
+  Future<Map<String, dynamic>> confirmDiary(String id, {CancelToken? cancel}) =>
+      request('POST', '/api/diario/$id/confirmar-upload', cancel: cancel);
   Future<Map<String, dynamic>> result(
     String id, {
     bool audio = false,
@@ -202,15 +210,8 @@ class ApiClient {
     );
   }
 
-  Future<Map<String, dynamic>> editDiary(
-    String id,
-    String text, {
-    Map<String, String>? fields,
-  }) => request(
-    'PATCH',
-    '/api/diario/$id/texto',
-    data: {'texto': text, if (fields != null) 'campos': fields},
-  );
+  Future<Map<String, dynamic>> editDiary(String id, String text) =>
+      request('PATCH', '/api/diario/$id/texto', data: {'texto': text});
   Future<Map<String, dynamic>> approveDiary(String id) =>
       request('POST', '/api/diario/$id/aprovar');
   Future<Map<String, dynamic>> ask(
@@ -232,14 +233,11 @@ class ApiClient {
     String id,
     Map<String, dynamic> values,
   ) => request('PATCH', '/api/diario/$id/clima', data: values);
-  Future<void> retryWeather(String id) async {
-    await request(
-      'POST',
-      '/api/diario/$id/clima/tentar-novamente',
-      allowEmpty: true,
-    );
-  }
+  /// Consulta o clima atual da obra sem gravar; o usuário confirma ou corrige antes de salvar.
+  Future<Map<String, dynamic>> consultWeather(String projectId) =>
+      request('GET', '/api/diario/clima?projectId=$projectId');
 
+  /// Consome todas as páginas de uma listagem `{items, hasNext}`.
   Future<List<Map<String, dynamic>>> listAll(String path) async {
     final items = <Map<String, dynamic>>[];
     for (var page = 0; page < 10000; page++) {
@@ -252,33 +250,6 @@ class ApiClient {
       if (result['hasNext'] == false) return items;
     }
     throw ApiFailure('Há muitos registros para uma única atualização.');
-  }
-
-  Future<Uint8List> downloadOriginal(String id) async {
-    final info = await request('GET', '/api/documentos/$id/download');
-    final uri = Uri.tryParse(info['url'] ?? '');
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty)
-      throw ApiFailure('O arquivo não está disponível para download.');
-    try {
-      final r = await storage.get<List<int>>(
-        uri.toString(),
-        options: Options(
-          responseType: ResponseType.bytes,
-          followRedirects: false,
-        ),
-      );
-      final bytes = Uint8List.fromList(r.data ?? []);
-      if (bytes.isEmpty || sha256.convert(bytes).toString() != info['sha256'])
-        throw ApiFailure(
-          'O arquivo recebido está incompleto. Tente novamente.',
-        );
-      return bytes;
-    } on DioException {
-      throw ApiFailure('Não foi possível baixar o arquivo. Tente novamente.');
-    }
   }
 
   void close() {
