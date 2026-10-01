@@ -142,6 +142,50 @@ void main() {
     }
     auth.close();
   });
+  test('SRP pré-calculado vale para um único login e o expoente é novo a cada tentativa', () async {
+    final access = token();
+    final adapter = FakeAdapter((r) async {
+      final target = r.headers['X-Amz-Target'] as String;
+      if (target.endsWith('.InitiateAuth')) {
+        return jsonResponse({
+          'ChallengeName': 'PASSWORD_VERIFIER',
+          'ChallengeParameters': {
+            'USER_ID_FOR_SRP': 'usuario-teste',
+            'SALT': 'abcdef0123456789abcdef0123456789',
+            'SRP_B': '1234567890abcdef1234567890abcdef1234567890abcdef',
+            'SECRET_BLOCK': base64.encode(utf8.encode('bloco-secreto')),
+          },
+        });
+      }
+      if (target.endsWith('.RespondToAuthChallenge')) {
+        return jsonResponse({
+          'AuthenticationResult': {'AccessToken': access},
+        });
+      }
+      return jsonResponse({
+        'Username': 'Marina',
+        'UserAttributes': [
+          {'Name': 'sub', 'Value': 'usuario'},
+        ],
+      });
+    });
+    final auth = CognitoAuth(
+      issuer,
+      'client',
+      client: Dio()..httpClientAdapter = adapter,
+    );
+    auth.prepare();
+    await auth.login('teste@organizai.dev', 'x');
+    await auth.login('teste@organizai.dev', 'x');
+    final a = [
+      for (final r in adapter.requests)
+        if ('${r.headers['X-Amz-Target']}'.endsWith('.InitiateAuth'))
+          ((jsonDecode(r.data as String) as Map)['AuthParameters'] as Map)['SRP_A'],
+    ];
+    expect(a.length, 2);
+    expect(a[0], isNot(a[1]));
+    auth.close();
+  });
   test('Erro do Cognito em texto é interpretado, não vira falha de conexão', () async {
     final adapter = FakeAdapter(
       (_) async => jsonResponse('{"__type":"NotAuthorizedException"}', 400),

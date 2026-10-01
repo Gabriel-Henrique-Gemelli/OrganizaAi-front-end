@@ -107,10 +107,23 @@ class CognitoAuth {
     }
   }
 
+  CognitoSrp? _prepared;
+
+  /// Adianta o cálculo caro de A (g^a mod N) enquanto o usuário ainda digita. Não envia nada e
+  /// não guarda segredo além do `a` efêmero, descartado no primeiro login.
+  void prepare() {
+    if (_prepared != null || clientId.trim().isEmpty) return;
+    final srp = CognitoSrp(issuer.split('_').last);
+    srp.publicA;
+    _prepared = srp;
+  }
+
   /// Entra por SRP: o Cognito nunca recebe a senha, só a prova calculada aqui.
   Future<Object> login(String username, String password) async {
     endpoint; // recusa emissor inválido antes de qualquer envio
-    final srp = CognitoSrp(issuer.split('_').last);
+    // `a` vale para uma única tentativa: o par (a, A) pré-calculado nunca é reaproveitado.
+    final srp = _prepared ?? CognitoSrp(issuer.split('_').last);
+    _prepared = null;
     final first = await call('InitiateAuth', {
       'ClientId': clientId,
       'AuthFlow': 'USER_SRP_AUTH',

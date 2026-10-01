@@ -163,13 +163,17 @@ class AppStore extends ChangeNotifier {
     token = authenticated.accessToken;
     baseUrl = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     try {
+      // O token já foi validado pelo Cognito (GetUser); as duas leituras são independentes e
+      // seguem juntas. Se a conta não confere, a lista de obras é descartada.
+      final projectsRequest = api.listAll('/api/obras');
+      unawaited(projectsRequest.then((_) {}, onError: (_) {}));
       final account = await api.request('GET', '/api/conta');
       if (account['organizationId'] != organizationId ||
           account['subject'] != subject)
         throw ApiFailure('Não foi possível confirmar o acesso à organização.');
       company = account['company'] as String;
       await _load();
-      await synchronize();
+      await synchronize(prefetched: projectsRequest);
       started = true;
       section = Section.today;
       _scheduleSession();
@@ -189,7 +193,9 @@ class AppStore extends ChangeNotifier {
 
   /// As obras vêm do servidor. Documentos e diários ficam no cache local: aqui só se retoma a consulta
   /// do que ainda está em processamento (leitura de documento e transcrição).
-  Future<void> synchronize() async {
+  Future<void> synchronize({
+    Future<List<Map<String, dynamic>>>? prefetched,
+  }) async {
     require(true);
     if (working) throw ApiFailure('Aguarde o fim da operação para atualizar.');
     final current = session;
@@ -197,7 +203,7 @@ class AppStore extends ChangeNotifier {
     syncError = null;
     notifyListeners();
     try {
-      final freshProjects = (await api.listAll('/api/obras'))
+      final freshProjects = (await (prefetched ?? api.listAll('/api/obras')))
           .map(Project.fromJson)
           .toList();
       if (session != current) return;

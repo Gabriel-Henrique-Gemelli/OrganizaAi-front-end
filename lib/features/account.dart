@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/app_store.dart';
@@ -28,8 +30,21 @@ class _ConnectionFormState extends State<ConnectionForm> {
     widget.store.cognitoIssuer,
     widget.store.cognitoClientId,
   );
+  Timer? _warmUp;
+  @override
+  void initState() {
+    super.initState();
+    // Com a tela já desenhada e ociosa, deixa o cálculo pesado do SRP pronto antes do clique.
+    if (!widget.store.started) {
+      _warmUp = Timer(const Duration(milliseconds: 400), () {
+        if (mounted && !saving && challenge == null) cognito.prepare();
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _warmUp?.cancel();
     auth?.close();
     for (final c in [username, password, code, ...attributes.values]) {
       c.dispose();

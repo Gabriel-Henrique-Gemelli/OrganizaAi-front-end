@@ -100,7 +100,8 @@ void main() {
     expect(s.company, 'Empresa');
     expect(s.projects.single.name, 'Obra de teste');
     expect(s.selectedProjectId, projectId);
-    expect(adapter.requests.map((r) => r.path), ['/api/conta', '/api/obras?page=0']);
+    // conta e obras saem juntas (a sessão só existe depois do GetUser); a ordem de chegada não importa.
+    expect(adapter.requests.map((r) => r.path), unorderedEquals(['/api/conta', '/api/obras?page=0']));
     s.dispose();
   });
   test('Conta de outra organização não abre o catálogo', () async {

@@ -15,6 +15,9 @@
     the `--base-href` argument provided to `flutter build`.
   -->
   <base href="$FLUTTER_BASE_HREF">
+  <!-- Abre TCP/TLS com o Cognito e a API enquanto o app carrega: o login não paga o handshake no clique. -->
+  <link rel="preconnect" href="https://cognito-idp.us-east-1.amazonaws.com" crossorigin>
+  <link rel="preconnect" href="https://api.organizaii.com.br" crossorigin>
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">

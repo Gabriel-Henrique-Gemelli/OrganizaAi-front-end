@@ -26,6 +26,8 @@ class CognitoSrp {
   final String poolName;
   final BigInt _a;
   final DateTime Function() _clock;
+  // g^a mod N custa caro (3072 bits); calcula uma vez e reaproveita no InitiateAuth e no desafio.
+  late final BigInt publicA = _g.modPow(_a, _n);
 
   /// [poolName] é o trecho do id do pool depois do "_" (ex.: `rGx2f3AxE`). [a] e [clock] só existem
   /// para tornar o cálculo reproduzível em teste.
@@ -33,7 +35,6 @@ class CognitoSrp {
     : _a = a ?? _randomA(),
       _clock = clock ?? DateTime.now;
 
-  BigInt get publicA => _g.modPow(_a, _n);
   String get publicAHex => publicA.toRadixString(16);
 
   /// Respostas do desafio PASSWORD_VERIFIER a partir dos parâmetros devolvidos pelo Cognito.
@@ -74,9 +75,11 @@ class CognitoSrp {
     };
   }
 
+  /// Expoente privado efêmero de 256 bits: nível de segurança de ~128 bits num grupo de 3072 bits
+  /// (RFC 5054 / NIST SP 800-56A aceitam expoentes dessa ordem) e ~4x mais barato que 1024 bits.
   static BigInt _randomA() {
     final random = Random.secure();
-    final bytes = List<int>.generate(128, (_) => random.nextInt(256));
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
     return _bigInt(
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
     );
