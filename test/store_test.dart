@@ -219,6 +219,8 @@ void main() {
         return jsonResponse({
           'documentoId': 'd',
           'versionId': 'v',
+          'bucket': 'organizai-dev-docs',
+          'chave': 'org/o/proj/p/doc/d/v1/memorial_orig.txt',
           'urlUpload': 'https://storage.example/file',
           'metodo': 'PUT',
           'headers': {},
@@ -240,6 +242,10 @@ void main() {
     await s.addDocuments([file, file]);
     expect(s.documents.length, 1);
     expect(s.documents.single.text, 'ABC');
+    expect(
+      s.documents.single.storage,
+      'organizai-dev-docs/org/o/proj/p/doc/d/v1/memorial_orig.txt',
+    );
     final upload = adapter.requests.singleWhere(
       (r) => r.path == '/api/documentos/upload-url',
     );

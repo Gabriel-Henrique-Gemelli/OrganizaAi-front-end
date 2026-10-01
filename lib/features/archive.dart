@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/export.dart';
 import '../data/app_store.dart';
@@ -308,6 +309,18 @@ class _ArchivePageState extends State<ArchivePage> {
       ),
       SizedBox(height: 5),
       Text('${fileSize(d.size)} · ${d.pages} pág.', style: mono(size: 9)),
+      if (d.storage.isNotEmpty) ...[
+        SizedBox(height: 3),
+        Tooltip(
+          message: 's3://${d.storage}',
+          child: Text(
+            'S3 · ${d.storage.split('/').last}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: mono(size: 9),
+          ),
+        ),
+      ],
     ],
   );
   Widget _menu(DocumentRecord d) => PopupMenuButton<String>(
@@ -323,10 +336,16 @@ class _ArchivePageState extends State<ArchivePage> {
           context,
           () async => saveBytes(d.name, await widget.store.original(d)),
         );
+      if (v == 'path' && d.storage.isNotEmpty) {
+        await Clipboard.setData(ClipboardData(text: 's3://${d.storage}'));
+        if (mounted) toast(context, 'Caminho no S3 copiado.');
+      }
     },
     itemBuilder: (_) => [
       PopupMenuItem(value: 'open', child: Text('Abrir')),
       PopupMenuItem(value: 'download', child: Text('Baixar original')),
+      if (d.storage.isNotEmpty)
+        PopupMenuItem(value: 'path', child: Text('Copiar caminho no S3')),
     ],
   );
 }

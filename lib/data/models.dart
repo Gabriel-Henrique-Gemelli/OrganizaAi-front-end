@@ -114,7 +114,7 @@ class OcrLine {
 }
 
 class DocumentRecord {
-  String id, projectId, name, contentType, hash, status, category, text, source;
+  String id, projectId, name, contentType, hash, status, category, text, source, storage;
   String? remoteId, versionId, message, validity, reviewedBy;
   int size, pages;
   DateTime created, updated;
@@ -133,6 +133,7 @@ class DocumentRecord {
     this.category = 'Não classificado',
     this.text = '',
     this.source = '',
+    this.storage = '',
     this.remoteId,
     this.versionId,
     this.message,
@@ -178,6 +179,7 @@ class DocumentRecord {
     'category': category,
     'text': text,
     'source': source,
+    'storage': storage,
     'remoteId': remoteId,
     'versionId': versionId,
     'message': message,
@@ -203,6 +205,7 @@ class DocumentRecord {
     category: j['category'] ?? 'Não classificado',
     text: j['text'] ?? '',
     source: j['source'] ?? '',
+    storage: j['storage'] ?? '',
     remoteId: j['remoteId'],
     versionId: j['versionId'],
     message: j['message'],

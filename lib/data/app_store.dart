@@ -460,6 +460,9 @@ class AppStore extends ChangeNotifier {
         );
         d.remoteId = receipt['documentoId'];
         d.versionId = receipt['versionId'];
+        // Onde o arquivo ficou no armazenamento (bucket/chave): <nome>_orig.<ext> na versão 1.
+        if (receipt['chave'] is String)
+          d.storage = '${receipt['bucket'] ?? ''}/${receipt['chave']}';
         if (d.remoteId == null || d.versionId == null)
           throw ApiFailure('Resposta de upload sem documentoId ou versionId.');
         _receipts[d.id] = receipt;
