@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/error_handling.dart';
 import '../data/app_store.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
@@ -26,8 +27,8 @@ class _AssistantPageState extends State<AssistantPage> {
     try {
       await widget.store.ask(q);
       if (mounted && question.text.trim() == q) question.clear();
-    } catch (e) {
-      if (mounted) toast(context, '$e');
+    } catch (e, st) {
+      if (mounted) toast(context, friendlyMessage(e, st));
     }
   }
 

@@ -8,6 +8,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/config.dart';
+import '../core/error_handling.dart';
 import '../core/export.dart';
 import 'api_client.dart';
 import 'auth.dart';
@@ -181,7 +182,11 @@ class AppStore extends ChangeNotifier {
         if (started &&
             !working &&
             {Section.today, Section.archive}.contains(section)) {
-          unawaited(synchronize().catchError((Object _) {}));
+          unawaited(
+            synchronize().catchError((Object e, StackTrace s) {
+              AppErrors.report(e, s, 'sincronizacao');
+            }),
+          );
         }
       });
       notifyListeners();
@@ -211,7 +216,8 @@ class AppStore extends ChangeNotifier {
       if (!projects.any((p) => p.id == selectedProjectId))
         selectedProjectId = projects.firstOrNull?.id ?? '';
       for (final d in documents.where(
-        (d) => d.remoteId != null && d.confirmed && d.status == 'AGUARDANDO_OCR',
+        (d) =>
+            d.remoteId != null && d.confirmed && d.status == 'AGUARDANDO_OCR',
       )) {
         try {
           final j = await api.result(d.remoteId!);
@@ -237,8 +243,8 @@ class AppStore extends ChangeNotifier {
       }
       lastSync = DateTime.now();
       await persist();
-    } catch (e) {
-      if (session == current) syncError = e.toString();
+    } catch (e, st) {
+      if (session == current) syncError = friendlyMessage(e, st);
       rethrow;
     } finally {
       syncing = false;
@@ -269,7 +275,8 @@ class AppStore extends ChangeNotifier {
           _api?.http.options.headers['Authorization'] = 'Bearer $token';
           _scheduleSession();
           notifyListeners();
-        } catch (_) {
+        } catch (e, st) {
+          AppErrors.report(e, st, 'renovacao_sessao');
           if (session == current)
             _sessionTimer = Timer(
               current.expires.difference(DateTime.now()),
@@ -506,7 +513,7 @@ class AppStore extends ChangeNotifier {
       _applyOcr(d, result);
       log(d.ready ? 'Leitura concluída' : 'Leitura falhou', d.name);
       d.message = d.ready ? null : 'O processamento falhou no servidor. Confira o arquivo antes de reenviar.';
-    } catch (e) {
+    } catch (e, st) {
       d.status = cancel.isCancelled
           ? 'CANCELADO'
           : e is ApiFailure && e.status == 202
@@ -514,7 +521,7 @@ class AppStore extends ChangeNotifier {
           : e is ApiFailure && e.status == 409
           ? 'DUPLICADO'
           : 'FAILED';
-      d.message = e.toString();
+      d.message = friendlyMessage(e, st);
     } finally {
       tasks.remove(d.id);
       d.updated = DateTime.now();
@@ -624,9 +631,9 @@ class AppStore extends ChangeNotifier {
         j = await api.poll(e.remoteId!, audio: true, cancel: cancel);
       _applyDiary(e, j);
       log('Áudio registrado', e.author);
-    } catch (err) {
+    } catch (err, st) {
       e.status = cancel.isCancelled ? 'CANCELADO' : 'FALHA_TRANSCRICAO';
-      e.message = err.toString();
+      e.message = friendlyMessage(err, st);
     } finally {
       tasks.remove(e.id);
       await persist();
@@ -657,8 +664,8 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
     try {
       _applyDiary(e, await api.poll(e.remoteId!, audio: true, cancel: cancel));
-    } catch (err) {
-      e.message = err.toString();
+    } catch (err, st) {
+      e.message = friendlyMessage(err, st);
     } finally {
       tasks.remove(e.id);
       await persist();

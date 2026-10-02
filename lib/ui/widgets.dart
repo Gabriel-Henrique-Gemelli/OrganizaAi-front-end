@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../core/error_handling.dart';
 import '../data/models.dart';
 import 'theme.dart';
 
@@ -252,8 +253,8 @@ Future<void> runAction(
   try {
     await work();
     if (success != null && context.mounted) toast(context, success);
-  } catch (e) {
-    if (context.mounted) toast(context, e.toString());
+  } catch (e, s) {
+    if (context.mounted) toast(context, friendlyMessage(e, s));
   }
 }
 

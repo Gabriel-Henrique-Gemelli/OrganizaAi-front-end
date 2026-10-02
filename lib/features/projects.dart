@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/error_handling.dart';
 import '../data/app_store.dart';
 import '../data/models.dart';
 import '../ui/widgets.dart';
@@ -172,9 +173,9 @@ class _ProjectDialogState extends State<_ProjectDialog> {
         ),
       );
       if (mounted) navigator.pop();
-    } catch (e) {
+    } catch (e, st) {
       if (mounted) setState(() => saving = false);
-      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyMessage(e, st))));
     }
   }
 

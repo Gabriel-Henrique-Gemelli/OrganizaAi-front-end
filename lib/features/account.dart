@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/app_store.dart';
 import '../core/config.dart';
+import '../core/error_handling.dart';
 import '../data/api_client.dart';
 import '../data/auth.dart';
 import '../ui/theme.dart';
@@ -77,13 +78,8 @@ class _ConnectionFormState extends State<ConnectionForm> {
     });
     try {
       await action();
-    } catch (e) {
-      if (mounted)
-        setState(
-          () => error = e is ApiFailure
-              ? e.message
-              : 'Não foi possível concluir. Tente novamente.',
-        );
+    } catch (e, st) {
+      if (mounted) setState(() => error = friendlyMessage(e, st));
     } finally {
       if (mounted) setState(() => saving = false);
     }
