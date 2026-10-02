@@ -360,4 +360,72 @@ void main() {
       );
     });
   });
+
+  group('Falhas de rede e sessão', () {
+    ApiClient clientWith(FakeAdapter adapter) {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example'));
+      dio.httpClientAdapter = adapter;
+      return ApiClient('https://api.example', client: dio);
+    }
+
+    Future<ResponseBody> falha(RequestOptions o, DioExceptionType t) =>
+        Future.error(DioException(requestOptions: o, type: t));
+
+    test('timeout e falta de conexão têm mensagens diferentes', () async {
+      final timeout = clientWith(FakeAdapter((o) => falha(o, DioExceptionType.receiveTimeout)));
+      final offline = clientWith(FakeAdapter((o) => falha(o, DioExceptionType.connectionError)));
+      await expectLater(
+        timeout.request('GET', '/x'),
+        throwsA(isA<ApiFailure>().having((e) => e.message, 'message', contains('demorou'))),
+      );
+      await expectLater(
+        offline.request('GET', '/x'),
+        throwsA(isA<ApiFailure>().having((e) => e.message, 'message', contains('Sem conexão'))),
+      );
+    });
+
+    test('502, 503 e 504 viram aviso de serviço indisponível', () async {
+      for (final code in [502, 503, 504]) {
+        final api = clientWith(FakeAdapter((o) async => jsonResponse({}, code)));
+        await expectLater(
+          api.request('GET', '/x'),
+          throwsA(isA<ApiFailure>().having((e) => e.message, 'message', contains('indisponível'))),
+        );
+      }
+    });
+
+    test('401 avisa quem encerra a sessão e ainda devolve o erro ao chamador', () async {
+      final api = clientWith(FakeAdapter((o) async => jsonResponse({}, 401)));
+      var avisos = 0;
+      api.onUnauthorized = () => avisos++;
+      await expectLater(
+        api.request('GET', '/x'),
+        throwsA(isA<ApiFailure>().having((e) => e.status, 'status', 401)),
+      );
+      expect(avisos, 1);
+    });
+
+    test('callback de 401 que lança não esconde a resposta original', () async {
+      final api = clientWith(FakeAdapter((o) async => jsonResponse({}, 401)));
+      api.onUnauthorized = () => throw StateError('falhou ao sair');
+      await expectLater(
+        api.request('GET', '/x'),
+        throwsA(isA<ApiFailure>().having((e) => e.status, 'status', 401)),
+      );
+    });
+
+    test('cancelar durante a espera do poll termina em ApiFailure, sem erro solto', () async {
+      final api = clientWith(
+        FakeAdapter((o) async => jsonResponse({'status': 'AGUARDANDO_OCR'})),
+      );
+      final cancel = CancelToken();
+      final futuro = api.poll('d', cancel: cancel, interval: const Duration(seconds: 30));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      cancel.cancel();
+      await expectLater(
+        futuro,
+        throwsA(isA<ApiFailure>().having((e) => e.message, 'message', contains('cancelada'))),
+      );
+    });
+  });
 }

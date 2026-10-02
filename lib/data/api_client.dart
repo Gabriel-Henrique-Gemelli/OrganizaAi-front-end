@@ -16,6 +16,10 @@ class ApiFailure implements Exception {
 class ApiClient {
   final Dio http;
   final Dio storage;
+
+  /// Chamado quando o servidor responde 401 (sessão vencida ou revogada), para quem usa o cliente encerrar
+  /// a sessão em vez de deixar o app "logado" com um token que não vale mais.
+  void Function()? onUnauthorized;
   ApiClient(String baseUrl, {String token = '', Dio? client, Dio? uploadClient})
     : http =
           client ??
@@ -59,9 +63,32 @@ class ApiClient {
       if (result.data is! Map)
         throw ApiFailure('O servidor retornou uma resposta inesperada.');
       return Map<String, dynamic>.from(result.data as Map);
+    } on TypeError {
+      throw ApiFailure('O servidor retornou uma resposta inesperada.');
+    } on FormatException {
+      throw ApiFailure('O servidor retornou uma resposta inesperada.');
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) throw ApiFailure('Operação cancelada.');
       final body = e.response?.data;
+      if (e.response == null) {
+        // Sem resposta: distinguir demora de falta de conexão ajuda o usuário a saber o que fazer.
+        throw ApiFailure(switch (e.type) {
+          DioExceptionType.connectionTimeout ||
+          DioExceptionType.sendTimeout ||
+          DioExceptionType.receiveTimeout =>
+            'O servidor demorou para responder. Tente novamente em instantes.',
+          DioExceptionType.connectionError =>
+            'Sem conexão com o servidor. Confira sua internet.',
+          _ => 'Não foi possível acessar o serviço. Tente novamente.',
+        });
+      }
+      if (e.response?.statusCode == 401) {
+        try {
+          onUnauthorized?.call();
+        } catch (_) {
+          // Encerrar a sessão não pode esconder a resposta original para quem chamou.
+        }
+      }
       if (ocrResult &&
           e.response?.statusCode == 422 &&
           body is Map &&
@@ -77,6 +104,7 @@ class ApiClient {
         413 => 'O arquivo é maior do que o servidor aceita.',
         415 => 'O servidor não aceita este formato de arquivo.',
         429 => 'Muitas solicitações. Aguarde antes de tentar novamente.',
+        502 || 503 || 504 => 'O serviço está indisponível no momento. Tente novamente em instantes.',
         _ => 'Não foi possível acessar o serviço. Confira sua conexão e tente novamente.',
       }, e.response?.statusCode);
     }
@@ -178,6 +206,22 @@ class ApiClient {
     cancel: cancel,
     ocrResult: !audio,
   );
+
+  /// Espera [interval] ou o cancelamento, o que vier primeiro. Sem `Future` de erro solto: o antigo
+  /// `cancel.whenCancel.then((_) => throw ...)` virava erro não tratado quando o tempo vencia a corrida.
+  Future<void> _pause(Duration interval, CancelToken? cancel) async {
+    final done = Completer<void>();
+    final timer = Timer(interval, () {
+      if (!done.isCompleted) done.complete();
+    });
+    cancel?.whenCancel.then((_) {
+      if (!done.isCompleted) done.complete();
+    });
+    await done.future;
+    timer.cancel();
+    if (cancel?.isCancelled == true) throw ApiFailure('Consulta cancelada.');
+  }
+
   Future<Map<String, dynamic>> poll(
     String id, {
     bool audio = false,
@@ -196,14 +240,7 @@ class ApiClient {
         'EM_TRANSCRICAO',
       }.contains(body['status']))
         return body;
-      if (i < attempts - 1)
-        await Future.any([
-          Future.delayed(interval),
-          if (cancel != null)
-            cancel.whenCancel.then(
-              (_) => throw ApiFailure('Consulta cancelada.'),
-            ),
-        ]);
+      if (i < attempts - 1) await _pause(interval, cancel);
     }
     throw ApiFailure(
       'O processamento continua no servidor. Retome a consulta quando quiser.',

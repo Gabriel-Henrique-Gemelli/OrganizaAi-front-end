@@ -58,7 +58,17 @@ class AppStore extends ChangeNotifier {
   final Map<String, Map<String, dynamic>> _receipts = {};
   ApiClient? _api;
   ApiClient get api => _api ??=
-      apiFactory?.call(baseUrl, token) ?? ApiClient(baseUrl, token: token);
+      (apiFactory?.call(baseUrl, token) ?? ApiClient(baseUrl, token: token))
+        ..onUnauthorized = _sessionRejected;
+
+  /// O servidor recusou o token (401): encerra a sessão uma vez, em vez de deixar o app logado com um
+  /// token que não vale mais e mostrar o mesmo erro em cada ação.
+  void _sessionRejected() {
+    if (session == null || _disposed) return;
+    AppErrors.report('401 do servidor: sessão encerrada', null, 'sessao');
+    signOut();
+  }
+
   String get scope => sha256
       .convert(utf8.encode('$baseUrl|$cognitoIssuer|$organizationId|$subject'))
       .toString();
