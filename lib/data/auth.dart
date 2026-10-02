@@ -199,7 +199,8 @@ class CognitoAuth {
   }) async {
     if (j['AuthenticationResult'] is Map) {
       final tokens = Map<String, dynamic>.from(j['AuthenticationResult']);
-      if (pending) {
+      // Conta sem organização (cadastro que parou no meio): o app completa o cadastro em vez de recusar.
+      if (pending || !_hasOrganization(tokens['AccessToken'])) {
         return PendingTokens(
           tokens['AccessToken'],
           tokens['RefreshToken'] ?? '',
@@ -237,6 +238,31 @@ class CognitoAuth {
       p['USER_ID_FOR_SRP'] ?? username,
       attributes,
     );
+  }
+
+  /// Só lê a claim para decidir o caminho; quem autentica de verdade é o GetUser em [verify].
+  static bool _hasOrganization(String accessToken) {
+    try {
+      final parts = accessToken.split('.');
+      if (parts.length != 3)
+        return true; // formato estranho: deixa o verify() recusar
+      final claims = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      final org = claims is Map ? claims['custom:org_id'] : null;
+      return org is String && org.isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// O e-mail da conta já foi confirmado? (Cadastro que parou depois do código.)
+  Future<bool> emailVerified(String accessToken) async {
+    final user = await call('GetUser', {'AccessToken': accessToken});
+    for (final a in user['UserAttributes'] as List? ?? []) {
+      if (a['Name'] == 'email_verified') return a['Value'] == 'true';
+    }
+    return false;
   }
 
   Future<AuthSession> verify(

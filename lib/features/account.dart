@@ -29,7 +29,8 @@ class _ConnectionFormState extends State<ConnectionForm> {
       resetting = false,
       showPassword = false,
       registering = false,
-      verifying = false;
+      verifying = false,
+      emailVerified = false;
   PendingTokens? pendingTokens;
   String? error, notice;
   AuthChallenge? challenge;
@@ -131,6 +132,22 @@ class _ConnectionFormState extends State<ConnectionForm> {
     if (result is AuthSession) {
       await widget.store.connect(result);
       widget.onSaved?.call();
+    } else if (result is PendingTokens) {
+      final pending = result;
+      // Conta sem organização: cadastro que parou no meio. Completa em vez de recusar o login.
+      final verified = await cognito.emailVerified(pending.accessToken);
+      if (!verified) await cognito.sendEmailCode(pending.accessToken);
+      if (!mounted) return;
+      setState(() {
+        pendingTokens = pending;
+        emailVerified = verified;
+        registering = true;
+        verifying = true;
+        code.clear();
+        notice = verified
+            ? 'Seu e-mail já está confirmado. Informe o nome da sua empresa para concluir o cadastro.'
+            : 'Enviamos um código de verificação para o seu e-mail.';
+      });
     } else if (result is AuthChallenge) {
       for (final c in attributes.values) {
         c.dispose();
@@ -185,18 +202,25 @@ class _ConnectionFormState extends State<ConnectionForm> {
     setState(() {
       pendingTokens = result;
       verifying = true;
+      emailVerified = false;
       code.clear();
       notice = 'Enviamos um código de verificação para $email.';
     });
   });
 
-  /// Etapa 2: confirma o código, cria a organização e entra já com ela.
+  /// Etapa 2: confirma o código (se ainda não foi), cria a organização e entra já com ela. Cada passo
+  /// que deu certo não se repete: se a criação da organização falhar, tentar de novo não pede outro código.
   Future<void> verifyAndEnter() => guard(() async {
     final tokens = pendingTokens;
     if (tokens == null) throw ApiFailure('Refaça o cadastro.');
-    if (code.text.trim().isEmpty)
-      throw ApiFailure('Preencha o código recebido por e-mail.');
-    await cognito.verifyEmail(tokens.accessToken, code.text.trim());
+    if (company.text.trim().isEmpty)
+      throw ApiFailure('Informe o nome da sua empresa.');
+    if (!emailVerified) {
+      if (code.text.trim().isEmpty)
+        throw ApiFailure('Preencha o código recebido por e-mail.');
+      await cognito.verifyEmail(tokens.accessToken, code.text.trim());
+      emailVerified = true;
+    }
     final api = ApiClient(widget.store.baseUrl, token: tokens.accessToken);
     try {
       await api.activate(company.text.trim());
@@ -219,6 +243,7 @@ class _ConnectionFormState extends State<ConnectionForm> {
   void switchMode({required bool toRegister}) => setState(() {
     registering = toRegister;
     verifying = false;
+    emailVerified = false;
     pendingTokens = null;
     error = null;
     notice = null;
@@ -339,27 +364,37 @@ class _ConnectionFormState extends State<ConnectionForm> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(
-        'Confirme seu e-mail',
+        emailVerified ? 'Conclua seu cadastro' : 'Confirme seu e-mail',
         style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
       ),
       SizedBox(height: 10),
       Text(
-        'Digite o código que chegou no seu e-mail. Só depois disso a sua empresa é criada.',
+        emailVerified ? 'Falta só criar a sua empresa no OrganizAI.' : 'Digite o código que chegou no seu e-mail. Só depois disso a sua empresa é criada.',
         style: TextStyle(color: Palette.muted, height: 1.5),
       ),
       SizedBox(height: 24),
       FieldLabel(
-        'Código de verificação',
+        'Empresa',
         child: TextField(
-          controller: code,
+          controller: company,
           enabled: !saving,
-          autofillHints: const [AutofillHints.oneTimeCode],
-          keyboardType: TextInputType.number,
-          onSubmitted: (_) {
-            if (!saving) verifyAndEnter();
-          },
+          autofillHints: const [AutofillHints.organizationName],
+          textInputAction: TextInputAction.next,
         ),
       ),
+      if (!emailVerified)
+        FieldLabel(
+          'Código de verificação',
+          child: TextField(
+            controller: code,
+            enabled: !saving,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            keyboardType: TextInputType.number,
+            onSubmitted: (_) {
+              if (!saving) verifyAndEnter();
+            },
+          ),
+        ),
       if (notice != null) ...[Notice(notice!), SizedBox(height: 16)],
       if (error != null) ...[
         Text(error!, style: TextStyle(color: Palette.danger)),
@@ -370,10 +405,11 @@ class _ConnectionFormState extends State<ConnectionForm> {
         child: Text(saving ? 'AGUARDE…' : 'CONFIRMAR E ENTRAR'),
       ),
       SizedBox(height: 10),
-      TextButton(
-        onPressed: saving ? null : resendCode,
-        child: Text('Reenviar código'),
-      ),
+      if (!emailVerified)
+        TextButton(
+          onPressed: saving ? null : resendCode,
+          child: Text('Reenviar código'),
+        ),
       TextButton(
         onPressed: saving ? null : () => switchMode(toRegister: false),
         child: Text('Cancelar'),

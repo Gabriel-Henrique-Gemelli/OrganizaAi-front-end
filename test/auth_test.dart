@@ -232,4 +232,62 @@ void main() {
       auth.close();
     },
   );
+  test('Login de conta sem organização devolve PendingTokens em vez de recusar', () async {
+    final noOrg = () {
+      final payload = {
+        'iss': issuer,
+        'client_id': 'client',
+        'token_use': 'access',
+        'sub': 'usuario',
+        'exp':
+            DateTime.now().add(Duration(hours: 1)).millisecondsSinceEpoch ~/
+            1000,
+      };
+      return 'header.${base64Url.encode(utf8.encode(jsonEncode(payload)))}.sig';
+    }();
+    final adapter = FakeAdapter((r) async {
+      final target = r.headers['X-Amz-Target'] as String;
+      if (target.endsWith('.InitiateAuth')) {
+        return jsonResponse({
+          'ChallengeName': 'PASSWORD_VERIFIER',
+          'ChallengeParameters': {
+            'USER_ID_FOR_SRP': 'u-1',
+            'SALT': 'abcdef0123456789abcdef0123456789',
+            'SRP_B': '1234567890abcdef1234567890abcdef1234567890abcdef',
+            'SECRET_BLOCK': base64.encode(utf8.encode('bloco')),
+          },
+        });
+      }
+      return jsonResponse({
+        'AuthenticationResult': {'AccessToken': noOrg, 'RefreshToken': 'r'},
+      });
+    });
+    final auth = CognitoAuth(
+      issuer,
+      'client',
+      client: Dio()..httpClientAdapter = adapter,
+    );
+    final result = await auth.login('a@b.co', 'x');
+    expect(result, isA<PendingTokens>());
+    expect((result as PendingTokens).accessToken, noOrg);
+    auth.close();
+  });
+  test('emailVerified lê email_verified do GetUser', () async {
+    for (final c in {'true': true, 'false': false}.entries) {
+      final adapter = FakeAdapter(
+        (_) async => jsonResponse({
+          'UserAttributes': [
+            {'Name': 'email_verified', 'Value': c.key},
+          ],
+        }),
+      );
+      final auth = CognitoAuth(
+        issuer,
+        'client',
+        client: Dio()..httpClientAdapter = adapter,
+      );
+      expect(await auth.emailVerified('tok'), c.value);
+      auth.close();
+    }
+  });
 }
