@@ -5,6 +5,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 
 import 'core/config.dart';
+import 'core/error_handling.dart';
 import 'data/app_store.dart';
 import 'data/models.dart';
 import 'features/account.dart';
@@ -20,13 +21,16 @@ import 'ui/widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  AppErrors.install();
   try {
     await Hive.initFlutter('organizai');
     final box = await Hive.openBox('workspace_v1');
     final store = AppStore(box: box);
     await store.initialize();
+    AppErrors.recover = () => store.navigate(Section.today);
     runApp(OrganizAiApp(store: store));
-  } catch (_) {
+  } catch (e, s) {
+    AppErrors.report(e, s, 'inicializacao');
     runApp(
       MaterialApp(
         theme: appTheme(),
