@@ -79,6 +79,12 @@ void main() {
     ]) {
       expect(find.text(label), findsOneWidget);
     }
+    // Os dois campos de senha aceitam digitação completa, uma tecla após a outra.
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(3), 'Amovcana110!');
+    await tester.enterText(fields.at(4), 'Amovcana110!');
+    await tester.pump();
+    expect(find.text('Amovcana110!'), findsNWidgets(2));
     await tester.tap(find.text('CRIAR CONTA'));
     await tester.pumpAndSettle();
     expect(find.text('Informe seu nome.'), findsOneWidget);

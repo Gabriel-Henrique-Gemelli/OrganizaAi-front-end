@@ -290,9 +290,10 @@ class _ConnectionFormState extends State<ConnectionForm> {
                   obscureText: !showPassword,
                   enableSuggestions: false,
                   autocorrect: false,
-                  autofillHints: const [AutofillHints.newPassword],
+                  // Sem dica de autofill: o gerador de senha do navegador preenchia um campo e travava o outro.
                   textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
+                    helperMaxLines: 2,
                     helperText: '8 ou mais caracteres, com maiúscula, minúscula, número e símbolo.',
                     suffixIcon: IconButton(
                       tooltip: showPassword ? 'Ocultar senha' : 'Mostrar senha',
@@ -313,7 +314,6 @@ class _ConnectionFormState extends State<ConnectionForm> {
                   obscureText: !showPassword,
                   enableSuggestions: false,
                   autocorrect: false,
-                  autofillHints: const [AutofillHints.newPassword],
                   onSubmitted: (_) {
                     if (!saving) register();
                   },
