@@ -53,17 +53,21 @@ Future<void> main() async {
 class OrganizAiApp extends StatelessWidget {
   final AppStore store;
   const OrganizAiApp({super.key, required this.store});
+
+  /// O `MaterialApp` (e o Navigator, com os diálogos abertos) é criado uma vez. Só a tela inicial escuta o
+  /// store. Antes, cada `notifyListeners()` (inclusive a cada pedaço de upload) reconstruía o app inteiro e
+  /// podia desmontar um diálogo aberto, o que gerava o erro `_dependents.isEmpty`.
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: store,
-    builder: (context, _) => MaterialApp(
-      title: AppConfig.brand,
-      debugShowCheckedModeBanner: false,
-      theme: appTheme(),
-      locale: Locale('pt', 'BR'),
-      supportedLocales: [Locale('pt', 'BR')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      home: store.started && store.session != null
+  Widget build(BuildContext context) => MaterialApp(
+    title: AppConfig.brand,
+    debugShowCheckedModeBanner: false,
+    theme: appTheme(),
+    locale: Locale('pt', 'BR'),
+    supportedLocales: [Locale('pt', 'BR')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    home: ListenableBuilder(
+      listenable: store,
+      builder: (context, _) => store.started && store.session != null
           ? Workspace(store)
           : WelcomePage(store),
     ),

@@ -94,6 +94,31 @@ void main() {
     await tester.pumpWidget(SizedBox.shrink());
     store.dispose();
   });
+  testWidgets('Diálogo aberto sobrevive às notificações do store (o app não é recriado)', (tester) async {
+    tester.view.physicalSize = Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = AppStore();
+    await store.initialize();
+    authenticated(store);
+    await tester.pumpWidget(OrganizAiApp(store: store));
+    await tester.pumpAndSettle();
+    showDialog<void>(
+      context: tester.element(find.byType(Workspace)),
+      builder: (_) => AlertDialog(content: Text('diálogo de teste')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('diálogo de teste'), findsOneWidget);
+    // Várias notificações seguidas, como as do progresso de upload.
+    store.navigate(Section.archive);
+    store.navigate(Section.today);
+    await tester.pump();
+    expect(find.text('diálogo de teste'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(SizedBox.shrink());
+    store.dispose();
+  });
   for (final size in [Size(390, 844), Size(800, 1100), Size(1440, 1000)]) {
     testWidgets('Sete telas adaptadas a ${size.width.toInt()}px', (
       tester,
