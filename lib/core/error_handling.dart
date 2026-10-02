@@ -107,27 +107,39 @@ class CompactErrorWidget extends StatelessWidget {
                   decoration: TextDecoration.none,
                 ),
               ),
-              if (AppErrors.recover != null) ...[
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: () {
-                    try {
-                      AppErrors.recover?.call();
-                    } catch (e, s) {
-                      AppErrors.report(e, s, 'recover');
-                    }
-                  },
-                  child: const Text(
-                    'VOLTAR AO INÍCIO',
-                    style: TextStyle(
-                      color: Color(0xFFFF5A1F),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      decoration: TextDecoration.none,
+              if (AppErrors.recover != null)
+                // Sem TextButton de propósito: este aviso pode ser desenhado fora de um Material, e um widget do
+                // Material ali lançaria outro erro dentro do próprio tratador. Semântica de botão e área de
+                // toque mínima de 48 px mantêm a acessibilidade.
+                Semantics(
+                  button: true,
+                  label: 'Voltar ao início',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      try {
+                        AppErrors.recover?.call();
+                      } catch (e, s) {
+                        AppErrors.report(e, s, 'recover');
+                      }
+                    },
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'VOLTAR AO INÍCIO',
+                          style: TextStyle(
+                            color: Color(0xFFFF5A1F),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         ),
