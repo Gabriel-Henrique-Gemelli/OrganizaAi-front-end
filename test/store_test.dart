@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:organizai_flutter/data/api_client.dart';
 import 'package:organizai_flutter/data/app_store.dart';
 import 'package:organizai_flutter/data/models.dart';
@@ -352,6 +356,57 @@ void main() {
     expect(clima.method, 'GET');
     expect(clima.uri.queryParameters['projectId'], projectId);
     expect(e.weather, isEmpty);
+    s.dispose();
+  });
+  test('Cache local corrompido não impede a entrada: é descartado e as obras vêm do servidor', () async {
+    final dir = await Directory.systemTemp.createTemp('organizai_hive');
+    Hive.init(dir.path);
+    final box = await Hive.openBox('cache_corrompido');
+    final adapter = fake((r) async => jsonResponse({}, 500));
+    final s = AppStore(
+      box: box,
+      apiFactory: (url, token) => ApiClient(
+        url,
+        client: Dio(BaseOptions(baseUrl: url))..httpClientAdapter = adapter,
+        uploadClient: Dio()..httpClientAdapter = adapter,
+      ),
+    )..baseUrl = 'https://api.example';
+    final scope = sha256.convert(utf8.encode('${s.baseUrl}|${s.cognitoIssuer}|$org|user')).toString();
+    await box.put('$scope:workspace_v3', '{json quebrado');
+
+    await s.connect(session());
+
+    expect(s.started, true);
+    expect(s.projects.single.name, 'Obra de teste');
+    expect(s.documents, isEmpty);
+    s.dispose();
+    await box.close();
+    await dir.delete(recursive: true);
+  });
+  test('Uma obra inválida na resposta do servidor é ignorada e as demais carregam', () async {
+    final adapter = FakeAdapter((r) async {
+      if (r.path == '/api/conta') {
+        return jsonResponse({'subject': 'user', 'organizationId': org, 'company': null});
+      }
+      if (r.path.startsWith('/api/obras?')) {
+        return jsonResponse({
+          'items': [
+            {'id': null, 'name': null},
+            project(),
+          ],
+          'hasNext': false,
+        });
+      }
+      return jsonResponse({}, 500);
+    });
+    final s = harness(adapter);
+
+    await s.connect(session());
+
+    expect(s.started, true);
+    expect(s.projects, hasLength(1));
+    expect(s.projects.single.name, 'Obra de teste');
+    expect(s.company, '');
     s.dispose();
   });
 }

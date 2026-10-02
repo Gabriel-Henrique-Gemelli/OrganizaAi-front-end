@@ -120,25 +120,57 @@ class AppStore extends ChangeNotifier {
     selectedDiaryId = null;
     final raw = _get('$scope:workspace_v3');
     if (raw is String) {
-      final j = Map<String, dynamic>.from(jsonDecode(raw));
-      projects = (j['projects'] as List? ?? [])
-          .map((x) => Project.fromJson(Map<String, dynamic>.from(x)))
-          .toList();
-      documents = (j['documents'] as List? ?? [])
-          .map((x) => DocumentRecord.fromJson(Map<String, dynamic>.from(x)))
-          .toList();
-      diaries = (j['diaries'] as List? ?? [])
-          .map((x) => DiaryEntry.fromJson(Map<String, dynamic>.from(x)))
-          .toList();
-      messages = (j['messages'] as List? ?? [])
-          .map((x) => ChatMessage.fromJson(Map<String, dynamic>.from(x)))
-          .toList();
-      audit = (j['audit'] as List? ?? [])
-          .map((x) => Map<String, dynamic>.from(x))
-          .toList();
-      chatSessions.addAll(Map<String, String>.from(j['chatSessions'] ?? {}));
-      selectedProjectId = j['selectedProjectId'] ?? '';
+      // Cache local corrompido ou de versão antiga não pode impedir o login: descarta e segue com listas
+      // vazias, que a sincronização preenche a partir do servidor.
+      try {
+        final j = Map<String, dynamic>.from(jsonDecode(raw));
+        projects = _parseItems(j['projects'], Project.fromJson, 'obras');
+        documents = _parseItems(
+          j['documents'],
+          DocumentRecord.fromJson,
+          'documentos',
+        );
+        diaries = _parseItems(j['diaries'], DiaryEntry.fromJson, 'diarios');
+        messages = _parseItems(
+          j['messages'],
+          ChatMessage.fromJson,
+          'mensagens',
+        );
+        audit = _parseItems(j['audit'], (m) => m, 'auditoria');
+        chatSessions.addAll(Map<String, String>.from(j['chatSessions'] ?? {}));
+        selectedProjectId = (j['selectedProjectId'] ?? '').toString();
+      } catch (e, st) {
+        AppErrors.report(e, st, 'cache_local_corrompido');
+        projects = [];
+        documents = [];
+        diaries = [];
+        messages = [];
+        audit = [];
+        chatSessions.clear();
+        selectedProjectId = '';
+      }
     }
+  }
+
+  /// Converte uma lista vinda de JSON item a item: um item inválido é registrado e ignorado, em vez de
+  /// derrubar a lista inteira (e, com ela, o login ou a sincronização).
+  List<T> _parseItems<T>(
+    Object? raw,
+    T Function(Map<String, dynamic>) parse,
+    String what,
+  ) {
+    final out = <T>[];
+    if (raw is! List) return out;
+    for (final item in raw) {
+      try {
+        if (item is! Map)
+          throw FormatException('item de $what não é um objeto');
+        out.add(parse(Map<String, dynamic>.from(item)));
+      } catch (e, st) {
+        AppErrors.report(e, st, 'dados_invalidos:$what');
+      }
+    }
+    return out;
   }
 
   Future<void> connect(AuthSession authenticated) async {
@@ -172,7 +204,7 @@ class AppStore extends ChangeNotifier {
       if (account['organizationId'] != organizationId ||
           account['subject'] != subject)
         throw ApiFailure('Não foi possível confirmar o acesso à organização.');
-      company = account['company'] as String;
+      company = (account['company'] ?? '').toString();
       await _load();
       await synchronize(prefetched: projectsRequest);
       started = true;
@@ -208,9 +240,11 @@ class AppStore extends ChangeNotifier {
     syncError = null;
     notifyListeners();
     try {
-      final freshProjects = (await (prefetched ?? api.listAll('/api/obras')))
-          .map(Project.fromJson)
-          .toList();
+      final freshProjects = _parseItems(
+        await (prefetched ?? api.listAll('/api/obras')),
+        Project.fromJson,
+        'obras',
+      );
       if (session != current) return;
       projects = freshProjects;
       if (!projects.any((p) => p.id == selectedProjectId))
@@ -224,8 +258,8 @@ class AppStore extends ChangeNotifier {
           if (session != current) return;
           _applyOcr(d, j);
           d.updated = DateTime.now();
-        } on ApiFailure catch (e) {
-          d.message = e.toString();
+        } catch (e, st) {
+          d.message = friendlyMessage(e, st);
         }
       }
       for (final e in diaries.where(
@@ -237,8 +271,8 @@ class AppStore extends ChangeNotifier {
           final j = await api.result(e.remoteId!, audio: true);
           if (session != current) return;
           _applyDiary(e, j);
-        } on ApiFailure catch (err) {
-          e.message = err.toString();
+        } catch (err, st) {
+          e.message = friendlyMessage(err, st);
         }
       }
       lastSync = DateTime.now();
@@ -313,9 +347,25 @@ class AppStore extends ChangeNotifier {
   static bool isUuid(String s) => RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   ).hasMatch(s.trim());
+
+  /// Grava o espaço de trabalho no aparelho. Falha de disco é registrada e não propaga: os dados seguem
+  /// na memória, e um erro aqui não pode mascarar o erro original de quem chamou dentro de um `finally`.
   Future<void> persist() async {
-    await _put('$scope:workspace_v3', jsonEncode(snapshot()));
+    try {
+      await _put('$scope:workspace_v3', jsonEncode(snapshot()));
+    } catch (e, st) {
+      AppErrors.report(e, st, 'persistencia');
+    }
     notifyListeners();
+  }
+
+  bool _disposed = false;
+
+  /// Timers e `finally` podem notificar depois do `dispose`: isso viraria 'used after dispose'.
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
   }
 
   Map<String, dynamic> snapshot() => {
@@ -821,6 +871,7 @@ class AppStore extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _sessionTimer?.cancel();
     _syncTimer?.cancel();
     _auth?.close();
