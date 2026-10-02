@@ -21,3 +21,4 @@ config.local.json
 .metadata
 *.iml
 pubspec.lock
+config.prod.json
