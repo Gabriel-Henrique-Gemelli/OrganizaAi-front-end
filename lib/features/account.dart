@@ -13,7 +13,18 @@ import '../ui/widgets.dart';
 class ConnectionForm extends StatefulWidget {
   final AppStore store;
   final VoidCallback? onSaved;
-  const ConnectionForm(this.store, {super.key, this.onSaved});
+
+  /// Cliente do Cognito e construtor do cliente da API: só os testes os trocam; em produção ficam nulos e o
+  /// formulário cria os reais a partir da configuração do store.
+  final CognitoAuth? cognitoClient;
+  final ApiClient Function(String baseUrl, {String token})? apiBuilder;
+  const ConnectionForm(
+    this.store, {
+    super.key,
+    this.onSaved,
+    this.cognitoClient,
+    this.apiBuilder,
+  });
   @override
   State<ConnectionForm> createState() => _ConnectionFormState();
 }
@@ -44,6 +55,7 @@ class _ConnectionFormState extends State<ConnectionForm> {
   @override
   void initState() {
     super.initState();
+    auth = widget.cognitoClient;
     // Com a tela já desenhada e ociosa, deixa o cálculo pesado do SRP pronto antes do clique.
     if (!widget.store.started) {
       _warmUp = Timer(const Duration(milliseconds: 400), () {
@@ -69,6 +81,10 @@ class _ConnectionFormState extends State<ConnectionForm> {
     }
     super.dispose();
   }
+
+  ApiClient _apiClient({String token = ''}) => widget.apiBuilder != null
+      ? widget.apiBuilder!(widget.store.baseUrl, token: token)
+      : ApiClient(widget.store.baseUrl, token: token);
 
   Future<void> guard(Future<void> Function() action) async {
     setState(() {
@@ -176,7 +192,7 @@ class _ConnectionFormState extends State<ConnectionForm> {
         'O acesso da organização ainda não foi configurado. Contate o responsável pelo sistema.',
       );
     final secret = password.text;
-    final api = ApiClient(widget.store.baseUrl);
+    final api = _apiClient();
     final String user;
     try {
       user = await api.signup(
@@ -217,7 +233,7 @@ class _ConnectionFormState extends State<ConnectionForm> {
       await cognito.verifyEmail(tokens.accessToken, code.text.trim());
       emailVerified = true;
     }
-    final api = ApiClient(widget.store.baseUrl, token: tokens.accessToken);
+    final api = _apiClient(token: tokens.accessToken);
     try {
       await api.activate(company.text.trim());
     } finally {
