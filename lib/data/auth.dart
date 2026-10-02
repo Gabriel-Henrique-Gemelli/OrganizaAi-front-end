@@ -21,6 +21,12 @@ class AuthSession {
   });
 }
 
+/// Tokens de uma conta recém-criada, ainda sem organização (que só existe depois do código do e-mail).
+class PendingTokens {
+  final String accessToken, refreshToken;
+  PendingTokens(this.accessToken, this.refreshToken);
+}
+
 class AuthChallenge {
   final String name, session, username;
   final List<String> attributes;
@@ -99,6 +105,7 @@ class CognitoAuth {
         'ExpiredCodeException' => 'O código expirou. Solicite outro.',
         'InvalidPasswordException' =>
           'A senha não atende à política da organização.',
+        'AliasExistsException' => 'Este e-mail já pertence a outra conta.',
         'InvalidParameterException' => 'Não foi possível entrar. Confira seus dados ou contate o responsável pelo sistema.',
         'TooManyRequestsException' || 'LimitExceededException' =>
           'Muitas tentativas. Aguarde antes de repetir.',
@@ -119,7 +126,11 @@ class CognitoAuth {
   }
 
   /// Entra por SRP: o Cognito nunca recebe a senha, só a prova calculada aqui.
-  Future<Object> login(String username, String password) async {
+  Future<Object> login(
+    String username,
+    String password, {
+    bool pending = false,
+  }) async {
     endpoint; // recusa emissor inválido antes de qualquer envio
     // `a` vale para uma única tentativa: o par (a, A) pré-calculado nunca é reaproveitado.
     final srp = _prepared ?? CognitoSrp(issuer.split('_').last);
@@ -130,7 +141,7 @@ class CognitoAuth {
       'AuthParameters': {'USERNAME': username, 'SRP_A': srp.publicAHex},
     });
     if (first['ChallengeName'] != 'PASSWORD_VERIFIER') {
-      return _resolve(first, username);
+      return _resolve(first, username, pending: pending);
     }
     final p = Map<String, dynamic>.from(first['ChallengeParameters'] ?? {});
     final userId = p['USER_ID_FOR_SRP'] ?? username;
@@ -147,6 +158,7 @@ class CognitoAuth {
         ),
       }),
       userId,
+      pending: pending,
     );
   }
 
@@ -180,9 +192,19 @@ class CognitoAuth {
     );
   }
 
-  Future<Object> _resolve(Map<String, dynamic> j, String username) async {
+  Future<Object> _resolve(
+    Map<String, dynamic> j,
+    String username, {
+    bool pending = false,
+  }) async {
     if (j['AuthenticationResult'] is Map) {
       final tokens = Map<String, dynamic>.from(j['AuthenticationResult']);
+      if (pending) {
+        return PendingTokens(
+          tokens['AccessToken'],
+          tokens['RefreshToken'] ?? '',
+        );
+      }
       return verify(
         tokens['AccessToken'],
         refreshToken: tokens['RefreshToken'] ?? '',
@@ -297,6 +319,35 @@ class CognitoAuth {
     return verify(
       j['AuthenticationResult']['AccessToken'],
       refreshToken: s.refreshToken,
+    );
+  }
+
+  /// Manda ao e-mail da conta o código que prova que a pessoa é dona do endereço.
+  Future<void> sendEmailCode(String accessToken) async {
+    await call('GetUserAttributeVerificationCode', {
+      'AccessToken': accessToken,
+      'AttributeName': 'email',
+    });
+  }
+
+  Future<void> verifyEmail(String accessToken, String code) async {
+    await call('VerifyUserAttribute', {
+      'AccessToken': accessToken,
+      'AttributeName': 'email',
+      'Code': code,
+    });
+  }
+
+  /// Renova a sessão de uma conta que acabou de ganhar organização: o token novo já traz o org_id.
+  Future<AuthSession> refreshPending(PendingTokens t) async {
+    final j = await call('InitiateAuth', {
+      'ClientId': clientId,
+      'AuthFlow': 'REFRESH_TOKEN_AUTH',
+      'AuthParameters': {'REFRESH_TOKEN': t.refreshToken},
+    });
+    return verify(
+      j['AuthenticationResult']['AccessToken'],
+      refreshToken: t.refreshToken,
     );
   }
 

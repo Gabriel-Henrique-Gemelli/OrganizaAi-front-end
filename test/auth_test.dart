@@ -180,27 +180,56 @@ void main() {
     final a = [
       for (final r in adapter.requests)
         if ('${r.headers['X-Amz-Target']}'.endsWith('.InitiateAuth'))
-          ((jsonDecode(r.data as String) as Map)['AuthParameters'] as Map)['SRP_A'],
+          ((jsonDecode(r.data as String) as Map)['AuthParameters']
+              as Map)['SRP_A'],
     ];
     expect(a.length, 2);
     expect(a[0], isNot(a[1]));
     auth.close();
   });
-  test('Erro do Cognito em texto é interpretado, não vira falha de conexão', () async {
-    final adapter = FakeAdapter(
-      (_) async => jsonResponse('{"__type":"NotAuthorizedException"}', 400),
-    );
-    final auth = CognitoAuth(
-      issuer,
-      'client',
-      client: Dio()..httpClientAdapter = adapter,
-    );
-    await expectLater(
-      auth.login('a@b.c', 'x'),
-      throwsA(
-        predicate((e) => '$e'.contains('Acesso não autorizado')),
-      ),
-    );
-    auth.close();
-  });
+  test(
+    'Erro do Cognito em texto é interpretado, não vira falha de conexão',
+    () async {
+      final adapter = FakeAdapter(
+        (_) async => jsonResponse('{"__type":"NotAuthorizedException"}', 400),
+      );
+      final auth = CognitoAuth(
+        issuer,
+        'client',
+        client: Dio()..httpClientAdapter = adapter,
+      );
+      await expectLater(
+        auth.login('a@b.c', 'x'),
+        throwsA(predicate((e) => '$e'.contains('Acesso não autorizado'))),
+      );
+      auth.close();
+    },
+  );
+  test(
+    'Verificação de e-mail pede e confirma o código com o access token',
+    () async {
+      final adapter = FakeAdapter((_) async => jsonResponse({}));
+      final auth = CognitoAuth(
+        issuer,
+        'client',
+        client: Dio()..httpClientAdapter = adapter,
+      );
+      await auth.sendEmailCode('tok');
+      await auth.verifyEmail('tok', '123456');
+      expect(adapter.requests.map((r) => r.headers['X-Amz-Target']), [
+        'AWSCognitoIdentityProviderService.GetUserAttributeVerificationCode',
+        'AWSCognitoIdentityProviderService.VerifyUserAttribute',
+      ]);
+      expect(jsonDecode(adapter.requests[0].data as String), {
+        'AccessToken': 'tok',
+        'AttributeName': 'email',
+      });
+      expect(jsonDecode(adapter.requests[1].data as String), {
+        'AccessToken': 'tok',
+        'AttributeName': 'email',
+        'Code': '123456',
+      });
+      auth.close();
+    },
+  );
 }

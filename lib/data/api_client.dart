@@ -211,23 +211,21 @@ class ApiClient {
     );
   }
 
-  /// Cadastro público: cria o usuário, a organização e o vínculo no servidor. Não usa token.
-  Future<void> signup({
+  /// Cadastro, etapa 1 (público, sem token): cria o usuário com o e-mail ainda não verificado e devolve
+  /// o nome interno dele no Cognito, que vale para entrar até o e-mail ser verificado.
+  Future<String> signup({
     required String name,
     required String email,
     required String password,
-    required String company,
   }) async {
     try {
-      await http.post(
+      final r = await http.post(
         '/api/conta/cadastro',
-        data: {
-          'nome': name,
-          'email': email,
-          'senha': password,
-          'organizacao': company,
-        },
+        data: {'nome': name, 'email': email, 'senha': password},
       );
+      final data = r.data;
+      if (data is Map && data['usuario'] is String) return data['usuario'];
+      throw ApiFailure('O servidor retornou uma resposta inesperada.');
     } on DioException catch (e) {
       final body = e.response?.data;
       final detail = body is Map && body['detail'] is String
@@ -239,6 +237,31 @@ class ApiClient {
         429 => 'Muitos cadastros agora. Tente novamente em alguns minutos.',
         _ => 'Não foi possível criar a conta. Confira sua conexão e tente novamente.',
       }, e.response?.statusCode);
+    }
+  }
+
+  /// Cadastro, etapa 2 (com o token de quem já verificou o e-mail): cria a organização da pessoa.
+  Future<void> activate(String company) async {
+    try {
+      await request(
+        'POST',
+        '/api/conta/ativar',
+        data: {'organizacao': company},
+      );
+    } on ApiFailure catch (e) {
+      if (e.status == 403) {
+        throw ApiFailure(
+          'Confirme o código do e-mail antes de continuar.',
+          403,
+        );
+      }
+      if (e.status == 409) {
+        throw ApiFailure(
+          'Já existe uma conta com este e-mail. Use “Entrar”.',
+          409,
+        );
+      }
+      rethrow;
     }
   }
 

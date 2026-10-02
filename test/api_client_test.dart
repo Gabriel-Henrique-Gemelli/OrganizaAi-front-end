@@ -258,48 +258,51 @@ void main() {
     api.close();
   });
 
-  group('Cadastro público', () {
-    ApiClient clientWith(FakeAdapter adapter) {
-      final dio = Dio(BaseOptions(baseUrl: 'https://api.example'));
+  group('Cadastro em duas etapas', () {
+    ApiClient clientWith(FakeAdapter adapter, {String token = ''}) {
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: 'https://api.example',
+          headers: {if (token.isNotEmpty) 'Authorization': 'Bearer $token'},
+        ),
+      );
       dio.httpClientAdapter = adapter;
-      return ApiClient('https://api.example', client: dio);
+      return ApiClient('https://api.example', token: token, client: dio);
     }
 
-    test('envia nome, e-mail, senha e empresa sem token', () async {
-      final adapter = FakeAdapter(
-        (o) async =>
-            jsonResponse({'organizationId': 'o', 'email': 'a@b.co'}, 201),
-      );
-      await clientWith(adapter).signup(
-        name: 'Maria',
-        email: 'a@b.co',
-        password: 'Senha#Forte1',
-        company: 'Construtora',
-      );
-      expect(adapter.requests.single.path, '/api/conta/cadastro');
-      expect(
-        adapter.requests.single.headers.containsKey('Authorization'),
-        false,
-      );
-      expect(adapter.requests.single.data, {
-        'nome': 'Maria',
-        'email': 'a@b.co',
-        'senha': 'Senha#Forte1',
-        'organizacao': 'Construtora',
-      });
-    });
+    test(
+      'signup envia nome, e-mail e senha sem token e devolve o usuário',
+      () async {
+        final adapter = FakeAdapter(
+          (o) async => jsonResponse({'usuario': 'u-1', 'email': 'a@b.co'}, 201),
+        );
+        final user = await clientWith(adapter)
+            .signup(name: 'Maria', email: 'a@b.co', password: 'Senha#Forte1');
+        expect(user, 'u-1');
+        expect(adapter.requests.single.path, '/api/conta/cadastro');
+        expect(
+          adapter.requests.single.headers.containsKey('Authorization'),
+          false,
+        );
+        expect(adapter.requests.single.data, {
+          'nome': 'Maria',
+          'email': 'a@b.co',
+          'senha': 'Senha#Forte1',
+        });
+      },
+    );
 
     for (final c in {
       409: 'Já existe uma conta com este e-mail',
       429: 'Muitos cadastros',
       500: 'Não foi possível criar a conta',
     }.entries) {
-      test('status ${c.key} vira mensagem em português', () async {
+      test('signup: status ${c.key} vira mensagem em português', () async {
         final api = clientWith(
           FakeAdapter((o) async => jsonResponse({}, c.key)),
         );
         await expectLater(
-          api.signup(name: 'M', email: 'a@b.co', password: 'x', company: 'C'),
+          api.signup(name: 'M', email: 'a@b.co', password: 'x'),
           throwsA(
             isA<ApiFailure>().having(
               (e) => e.message,
@@ -311,7 +314,7 @@ void main() {
       });
     }
 
-    test('400 mostra o motivo que o servidor explicou', () async {
+    test('signup: 400 mostra o motivo que o servidor explicou', () async {
       final api = clientWith(
         FakeAdapter(
           (o) async =>
@@ -319,12 +322,39 @@ void main() {
         ),
       );
       await expectLater(
-        api.signup(name: 'M', email: 'a@b.co', password: 'x', company: 'C'),
+        api.signup(name: 'M', email: 'a@b.co', password: 'x'),
         throwsA(
           isA<ApiFailure>().having(
             (e) => e.message,
             'message',
             'a senha precisa ser mais forte',
+          ),
+        ),
+      );
+    });
+
+    test('activate envia a empresa com o token', () async {
+      final adapter = FakeAdapter(
+        (o) async => jsonResponse({'organizationId': 'o'}),
+      );
+      await clientWith(adapter, token: 'tok').activate('Construtora');
+      expect(adapter.requests.single.path, '/api/conta/ativar');
+      expect(adapter.requests.single.headers['Authorization'], 'Bearer tok');
+      expect(adapter.requests.single.data, {'organizacao': 'Construtora'});
+    });
+
+    test('activate: 403 pede para confirmar o código do e-mail', () async {
+      final api = clientWith(
+        FakeAdapter((o) async => jsonResponse({}, 403)),
+        token: 'tok',
+      );
+      await expectLater(
+        api.activate('C'),
+        throwsA(
+          isA<ApiFailure>().having(
+            (e) => e.message,
+            'message',
+            contains('código do e-mail'),
           ),
         ),
       );
