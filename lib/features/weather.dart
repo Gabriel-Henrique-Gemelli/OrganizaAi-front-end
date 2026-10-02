@@ -25,114 +25,13 @@ class _DiaryWeatherState extends State<DiaryWeather> {
 
   /// [suggestion] é o clima consultado automaticamente: o usuário confirma ou corrige antes de salvar.
   Future<void> edit({Map<String, dynamic>? suggestion}) async {
-    // Os controllers pertencem a este diálogo: ficam locais e são descartados só depois da animação de
-    // saída, e não mais pela página (que podia sair da tela com o diálogo ainda aberto).
-    final inputs = <String, TextEditingController>{
-      for (final k in labels.keys)
-        k: TextEditingController(
-          text: '${(suggestion ?? widget.entry.weather)[k] ?? ''}',
-        ),
-    };
-    String? error;
     final values = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, set) => AlertDialog(
-          title: Text('Clima observado'),
-          content: SizedBox(
-            width: 390,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final e in labels.entries)
-                    FieldLabel(
-                      e.value,
-                      child: TextField(
-                        controller: inputs[e.key],
-                        keyboardType: e.key == 'condicao'
-                            ? TextInputType.text
-                            : TextInputType.numberWithOptions(
-                                decimal: true,
-                                signed: true,
-                              ),
-                      ),
-                    ),
-                  if (error != null) Notice(error!, color: Palette.warning),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final result = <String, dynamic>{};
-                for (final k in labels.keys) {
-                  final v = inputs[k]!.text.trim();
-                  if (v.isEmpty) continue;
-                  if (k == 'condicao') {
-                    if (v.length > 100) {
-                      set(() => error = 'Condição: até 100 caracteres.');
-                      return;
-                    }
-                    result[k] = v;
-                  } else {
-                    final n = double.tryParse(v.replaceAll(',', '.'));
-                    final min = k == 'temperaturaC' ? -90 : 0;
-                    final max = switch (k) {
-                      'temperaturaC' => 60,
-                      'umidadePercent' => 100,
-                      'ventoKmh' => 500,
-                      _ => 1000,
-                    };
-                    if (n == null ||
-                        !n.isFinite ||
-                        n < min ||
-                        n > max ||
-                        k == 'umidadePercent' && n != n.roundToDouble()) {
-                      set(
-                        () => error =
-                            '${labels[k]}: informe um valor entre $min e $max${k == 'umidadePercent' ? ', inteiro' : ''}.',
-                      );
-                      return;
-                    }
-                    result[k] = k == 'umidadePercent' ? n.toInt() : n;
-                  }
-                }
-                if (result.isEmpty) {
-                  set(() => error = 'Preencha ao menos um campo.');
-                  return;
-                }
-                if (suggestion != null) {
-                  final corrected = labels.keys.any((k) {
-                    final a = suggestion[k], b = result[k];
-                    if (a is num && b is num)
-                      return a.toDouble() != b.toDouble();
-                    return a != b;
-                  });
-                  result['corrigidoPeloUsuario'] = corrected;
-                  if (!corrected)
-                    result['tokenConsulta'] = suggestion['tokenConsulta'];
-                } else {
-                  result['corrigidoPeloUsuario'] = true;
-                }
-                Navigator.pop(context, result);
-              },
-              child: Text('Salvar clima'),
-            ),
-          ],
-        ),
+      builder: (_) => _WeatherDialog(
+        source: suggestion ?? widget.entry.weather,
+        suggestion: suggestion,
       ),
     );
-    Future<void>.delayed(const Duration(milliseconds: 500), () {
-      for (final c in inputs.values) {
-        c.dispose();
-      }
-    });
     if (values == null || !mounted) return;
     setState(() => busy = true);
     await runAction(
@@ -221,4 +120,128 @@ class _DiaryWeatherState extends State<DiaryWeather> {
       ),
     );
   }
+}
+
+/// O diálogo é dono dos controllers: são descartados quando a rota termina de sair da tela, pelo `dispose`
+/// do próprio State, e não por um atraso fixo depois do `await showDialog`.
+class _WeatherDialog extends StatefulWidget {
+  final Map<String, dynamic> source;
+  final Map<String, dynamic>? suggestion;
+  const _WeatherDialog({required this.source, this.suggestion});
+  @override
+  State<_WeatherDialog> createState() => _WeatherDialogState();
+}
+
+class _WeatherDialogState extends State<_WeatherDialog> {
+  static const labels = _DiaryWeatherState.labels;
+  late final Map<String, TextEditingController> inputs;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    inputs = {
+      for (final k in labels.keys)
+        k: TextEditingController(text: '${widget.source[k] ?? ''}'),
+    };
+  }
+
+  @override
+  void dispose() {
+    for (final c in inputs.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Clima observado'),
+    content: SizedBox(
+      width: 390,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final e in labels.entries)
+              FieldLabel(
+                e.value,
+                child: TextField(
+                  controller: inputs[e.key],
+                  keyboardType: e.key == 'condicao'
+                      ? TextInputType.text
+                      : TextInputType.numberWithOptions(
+                          decimal: true,
+                          signed: true,
+                        ),
+                ),
+              ),
+            if (error != null) Notice(error!, color: Palette.warning),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text('Cancelar'),
+      ),
+      FilledButton(
+        onPressed: () {
+          final result = <String, dynamic>{};
+          for (final k in labels.keys) {
+            final v = inputs[k]!.text.trim();
+            if (v.isEmpty) continue;
+            if (k == 'condicao') {
+              if (v.length > 100) {
+                setState(() => error = 'Condição: até 100 caracteres.');
+                return;
+              }
+              result[k] = v;
+            } else {
+              final n = double.tryParse(v.replaceAll(',', '.'));
+              final min = k == 'temperaturaC' ? -90 : 0;
+              final max = switch (k) {
+                'temperaturaC' => 60,
+                'umidadePercent' => 100,
+                'ventoKmh' => 500,
+                _ => 1000,
+              };
+              if (n == null ||
+                  !n.isFinite ||
+                  n < min ||
+                  n > max ||
+                  k == 'umidadePercent' && n != n.roundToDouble()) {
+                setState(
+                  () => error =
+                      '${labels[k]}: informe um valor entre $min e $max${k == 'umidadePercent' ? ', inteiro' : ''}.',
+                );
+                return;
+              }
+              result[k] = k == 'umidadePercent' ? n.toInt() : n;
+            }
+          }
+          if (result.isEmpty) {
+            setState(() => error = 'Preencha ao menos um campo.');
+            return;
+          }
+          final suggestion = widget.suggestion;
+          if (suggestion != null) {
+            final corrected = labels.keys.any((k) {
+              final a = suggestion[k], b = result[k];
+              if (a is num && b is num) return a.toDouble() != b.toDouble();
+              return a != b;
+            });
+            result['corrigidoPeloUsuario'] = corrected;
+            if (!corrected)
+              result['tokenConsulta'] = suggestion['tokenConsulta'];
+          } else {
+            result['corrigidoPeloUsuario'] = true;
+          }
+          Navigator.pop(context, result);
+        },
+        child: Text('Salvar clima'),
+      ),
+    ],
+  );
 }
