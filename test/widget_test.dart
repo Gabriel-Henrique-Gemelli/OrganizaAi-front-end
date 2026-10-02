@@ -59,6 +59,35 @@ void main() {
     await tester.pumpWidget(SizedBox.shrink());
     store.dispose();
   });
+  testWidgets('Login oferece criar conta e voltar para entrar', (tester) async {
+    tester.view.physicalSize = Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = AppStore();
+    await store.initialize();
+    await tester.pumpWidget(OrganizAiApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Não tenho conta. Criar conta'));
+    await tester.pumpAndSettle();
+    for (final label in [
+      'SEU NOME',
+      'EMPRESA',
+      'E-MAIL',
+      'SENHA',
+      'CONFIRMAR SENHA',
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    await tester.tap(find.text('CRIAR CONTA'));
+    await tester.pumpAndSettle();
+    expect(find.text('Informe seu nome.'), findsOneWidget);
+    await tester.tap(find.text('Já tenho conta. Entrar'));
+    await tester.pumpAndSettle();
+    expect(find.text('USUÁRIO OU E-MAIL'), findsOneWidget);
+    await tester.pumpWidget(SizedBox.shrink());
+    store.dispose();
+  });
   for (final size in [Size(390, 844), Size(800, 1100), Size(1440, 1000)]) {
     testWidgets('Sete telas adaptadas a ${size.width.toInt()}px', (
       tester,

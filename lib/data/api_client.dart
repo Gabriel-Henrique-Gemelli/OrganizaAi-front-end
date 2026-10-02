@@ -164,6 +164,7 @@ class ApiClient {
     data: {'sha256': hash},
     cancel: cancel,
   );
+
   /// Avisa o servidor que o áudio já está no armazenamento; ele confere o arquivo e inicia a transcrição.
   Future<Map<String, dynamic>> confirmDiary(String id, {CancelToken? cancel}) =>
       request('POST', '/api/diario/$id/confirmar-upload', cancel: cancel);
@@ -210,6 +211,37 @@ class ApiClient {
     );
   }
 
+  /// Cadastro público: cria o usuário, a organização e o vínculo no servidor. Não usa token.
+  Future<void> signup({
+    required String name,
+    required String email,
+    required String password,
+    required String company,
+  }) async {
+    try {
+      await http.post(
+        '/api/conta/cadastro',
+        data: {
+          'nome': name,
+          'email': email,
+          'senha': password,
+          'organizacao': company,
+        },
+      );
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      final detail = body is Map && body['detail'] is String
+          ? body['detail'] as String
+          : null;
+      throw ApiFailure(switch (e.response?.statusCode) {
+        400 => detail ?? 'Confira os campos preenchidos e tente novamente.',
+        409 => 'Já existe uma conta com este e-mail. Use “Entrar”.',
+        429 => 'Muitos cadastros agora. Tente novamente em alguns minutos.',
+        _ => 'Não foi possível criar a conta. Confira sua conexão e tente novamente.',
+      }, e.response?.statusCode);
+    }
+  }
+
   Future<Map<String, dynamic>> editDiary(String id, String text) =>
       request('PATCH', '/api/diario/$id/texto', data: {'texto': text});
   Future<Map<String, dynamic>> approveDiary(String id) =>
@@ -233,6 +265,7 @@ class ApiClient {
     String id,
     Map<String, dynamic> values,
   ) => request('PATCH', '/api/diario/$id/clima', data: values);
+
   /// Consulta o clima atual da obra sem gravar; o usuário confirma ou corrige antes de salvar.
   Future<Map<String, dynamic>> consultWeather(String projectId) =>
       request('GET', '/api/diario/clima?projectId=$projectId');

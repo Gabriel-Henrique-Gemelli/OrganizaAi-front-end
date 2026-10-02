@@ -232,7 +232,9 @@ void main() {
     api.close();
   });
   test('Áudio enviado é confirmado e o clima é consultado sem gravar', () async {
-    final adapter = FakeAdapter((r) async => jsonResponse({'status': 'EM_TRANSCRICAO'}));
+    final adapter = FakeAdapter(
+      (r) async => jsonResponse({'status': 'EM_TRANSCRICAO'}),
+    );
     final api = ApiClient(
       'https://api.example',
       client: Dio(BaseOptions(baseUrl: 'https://api.example'))
@@ -242,7 +244,10 @@ void main() {
     await api.consultWeather('obra');
     await api.editDiary('d', 'texto');
     expect(
-      adapter.requests.map((r) => '${r.method} ${r.uri.path}${r.uri.hasQuery ? '?${r.uri.query}' : ''}'),
+      adapter.requests.map(
+        (r) =>
+            '${r.method} ${r.uri.path}${r.uri.hasQuery ? '?${r.uri.query}' : ''}',
+      ),
       [
         'POST /api/diario/d/confirmar-upload',
         'GET /api/diario/clima?projectId=obra',
@@ -251,5 +256,78 @@ void main() {
     );
     expect(adapter.requests.last.data, {'texto': 'texto'});
     api.close();
+  });
+
+  group('Cadastro público', () {
+    ApiClient clientWith(FakeAdapter adapter) {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example'));
+      dio.httpClientAdapter = adapter;
+      return ApiClient('https://api.example', client: dio);
+    }
+
+    test('envia nome, e-mail, senha e empresa sem token', () async {
+      final adapter = FakeAdapter(
+        (o) async =>
+            jsonResponse({'organizationId': 'o', 'email': 'a@b.co'}, 201),
+      );
+      await clientWith(adapter).signup(
+        name: 'Maria',
+        email: 'a@b.co',
+        password: 'Senha#Forte1',
+        company: 'Construtora',
+      );
+      expect(adapter.requests.single.path, '/api/conta/cadastro');
+      expect(
+        adapter.requests.single.headers.containsKey('Authorization'),
+        false,
+      );
+      expect(adapter.requests.single.data, {
+        'nome': 'Maria',
+        'email': 'a@b.co',
+        'senha': 'Senha#Forte1',
+        'organizacao': 'Construtora',
+      });
+    });
+
+    for (final c in {
+      409: 'Já existe uma conta com este e-mail',
+      429: 'Muitos cadastros',
+      500: 'Não foi possível criar a conta',
+    }.entries) {
+      test('status ${c.key} vira mensagem em português', () async {
+        final api = clientWith(
+          FakeAdapter((o) async => jsonResponse({}, c.key)),
+        );
+        await expectLater(
+          api.signup(name: 'M', email: 'a@b.co', password: 'x', company: 'C'),
+          throwsA(
+            isA<ApiFailure>().having(
+              (e) => e.message,
+              'message',
+              contains(c.value),
+            ),
+          ),
+        );
+      });
+    }
+
+    test('400 mostra o motivo que o servidor explicou', () async {
+      final api = clientWith(
+        FakeAdapter(
+          (o) async =>
+              jsonResponse({'detail': 'a senha precisa ser mais forte'}, 400),
+        ),
+      );
+      await expectLater(
+        api.signup(name: 'M', email: 'a@b.co', password: 'x', company: 'C'),
+        throwsA(
+          isA<ApiFailure>().having(
+            (e) => e.message,
+            'message',
+            'a senha precisa ser mais forte',
+          ),
+        ),
+      );
+    });
   });
 }

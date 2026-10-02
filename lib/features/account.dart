@@ -20,9 +20,15 @@ class ConnectionForm extends StatefulWidget {
 class _ConnectionFormState extends State<ConnectionForm> {
   final username = TextEditingController(),
       password = TextEditingController(),
-      code = TextEditingController();
+      code = TextEditingController(),
+      name = TextEditingController(),
+      company = TextEditingController(),
+      confirm = TextEditingController();
   final attributes = <String, TextEditingController>{};
-  bool saving = false, resetting = false, showPassword = false;
+  bool saving = false,
+      resetting = false,
+      showPassword = false,
+      registering = false;
   String? error, notice;
   AuthChallenge? challenge;
   CognitoAuth? auth;
@@ -46,7 +52,15 @@ class _ConnectionFormState extends State<ConnectionForm> {
   void dispose() {
     _warmUp?.cancel();
     auth?.close();
-    for (final c in [username, password, code, ...attributes.values]) {
+    for (final c in [
+      username,
+      password,
+      code,
+      name,
+      company,
+      confirm,
+      ...attributes.values,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -127,6 +141,54 @@ class _ConnectionFormState extends State<ConnectionForm> {
       setState(() => challenge = nextChallenge);
     }
   });
+
+  /// Cria a conta no servidor e já entra com ela: a pessoa vira administradora de uma organização nova.
+  Future<void> register() => guard(() async {
+    final email = username.text.trim();
+    if (name.text.trim().isEmpty) throw ApiFailure('Informe seu nome.');
+    if (company.text.trim().isEmpty)
+      throw ApiFailure('Informe o nome da sua empresa.');
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email))
+      throw ApiFailure('Informe um e-mail válido.');
+    if (password.text.length < 8)
+      throw ApiFailure(
+        'A senha precisa ter 8 ou mais caracteres, com maiúscula, minúscula, número e símbolo.',
+      );
+    if (password.text != confirm.text)
+      throw ApiFailure('As senhas não conferem.');
+    if (AppConfig.validateUrl(widget.store.baseUrl) != null)
+      throw ApiFailure(
+        'O acesso da organização ainda não foi configurado. Contate o responsável pelo sistema.',
+      );
+    final secret = password.text;
+    final api = ApiClient(widget.store.baseUrl);
+    try {
+      await api.signup(
+        name: name.text.trim(),
+        email: email,
+        password: secret,
+        company: company.text.trim(),
+      );
+    } finally {
+      api.http.close();
+    }
+    password.clear();
+    confirm.clear();
+    final result = await cognito.login(email, secret);
+    if (!mounted) return;
+    if (result is AuthSession) {
+      await widget.store.connect(result);
+      widget.onSaved?.call();
+    }
+  });
+  void switchMode({required bool toRegister}) => setState(() {
+    registering = toRegister;
+    error = null;
+    notice = null;
+    password.clear();
+    confirm.clear();
+    code.clear();
+  });
   Future<void> forgot() => guard(() async {
     if (username.text.trim().isEmpty)
       throw ApiFailure('Informe seu usuário ou e-mail primeiro.');
@@ -138,6 +200,101 @@ class _ConnectionFormState extends State<ConnectionForm> {
         notice = 'Se a conta permitir recuperação, você receberá um código no contato cadastrado.';
       });
   });
+  Widget registerForm() => AutofillGroup(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Crie sua conta',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+        ),
+        SizedBox(height: 10),
+        Text(
+          'Você cria a sua empresa no OrganizAI e vira administrador dela. A equipe entra depois.',
+          style: TextStyle(color: Palette.muted, height: 1.5),
+        ),
+        SizedBox(height: 24),
+        FieldLabel(
+          'Seu nome',
+          child: TextField(
+            controller: name,
+            enabled: !saving,
+            autofillHints: const [AutofillHints.name],
+            textInputAction: TextInputAction.next,
+          ),
+        ),
+        FieldLabel(
+          'Empresa',
+          child: TextField(
+            controller: company,
+            enabled: !saving,
+            autofillHints: const [AutofillHints.organizationName],
+            textInputAction: TextInputAction.next,
+          ),
+        ),
+        FieldLabel(
+          'E-mail',
+          child: TextField(
+            controller: username,
+            enabled: !saving,
+            autocorrect: false,
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            textInputAction: TextInputAction.next,
+          ),
+        ),
+        FieldLabel(
+          'Senha',
+          child: TextField(
+            controller: password,
+            enabled: !saving,
+            obscureText: !showPassword,
+            enableSuggestions: false,
+            autocorrect: false,
+            autofillHints: const [AutofillHints.newPassword],
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              helperText: '8 ou mais caracteres, com maiúscula, minúscula, número e símbolo.',
+              suffixIcon: IconButton(
+                tooltip: showPassword ? 'Ocultar senha' : 'Mostrar senha',
+                onPressed: () => setState(() => showPassword = !showPassword),
+                icon: Icon(
+                  showPassword ? Icons.visibility_off : Icons.visibility,
+                ),
+              ),
+            ),
+          ),
+        ),
+        FieldLabel(
+          'Confirmar senha',
+          child: TextField(
+            controller: confirm,
+            enabled: !saving,
+            obscureText: !showPassword,
+            enableSuggestions: false,
+            autocorrect: false,
+            autofillHints: const [AutofillHints.newPassword],
+            onSubmitted: (_) {
+              if (!saving) register();
+            },
+          ),
+        ),
+        if (error != null) ...[
+          Text(error!, style: TextStyle(color: Palette.danger)),
+          SizedBox(height: 16),
+        ],
+        FilledButton(
+          onPressed: saving ? null : register,
+          child: Text(saving ? 'AGUARDE…' : 'CRIAR CONTA'),
+        ),
+        SizedBox(height: 10),
+        TextButton(
+          onPressed: saving ? null : () => switchMode(toRegister: false),
+          child: Text('Já tenho conta. Entrar'),
+        ),
+      ],
+    ),
+  );
   @override
   Widget build(BuildContext context) {
     final s = widget.store;
@@ -164,6 +321,7 @@ class _ConnectionFormState extends State<ConnectionForm> {
           ),
         ],
       );
+    if (registering) return registerForm();
     final newPassword = resetting || challenge?.name == 'NEW_PASSWORD_REQUIRED';
     final needsCode = resetting || (challenge != null && !newPassword);
     return AutofillGroup(
@@ -258,6 +416,11 @@ class _ConnectionFormState extends State<ConnectionForm> {
             TextButton(
               onPressed: saving ? null : forgot,
               child: Text('Esqueci minha senha'),
+            ),
+          if (challenge == null && !resetting)
+            TextButton(
+              onPressed: saving ? null : () => switchMode(toRegister: true),
+              child: Text('Não tenho conta. Criar conta'),
             ),
           if (challenge != null || resetting)
             TextButton(
