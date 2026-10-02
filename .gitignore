@@ -15,3 +15,8 @@ config.local.json
 config.json
 config.local.json
 .env
+
+# Arquivos gerados pela IDE (IntelliJ/Android Studio) e pelo Flutter, que cada máquina recria.
+.idea/
+.metadata
+*.iml
