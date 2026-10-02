@@ -88,7 +88,11 @@ class _ReviewPageState extends State<ReviewPage> {
                 ),
               )
               .toList(),
-          onChanged: (id) => store.navigate(Section.review, document: id),
+          // Adiado para depois do frame: a chave do dropdown muda com o documento, e navegar na hora
+          // desmonta o elemento enquanto a rota do menu ainda depende dele (assertion _dependents.isEmpty).
+          onChanged: (id) => WidgetsBinding.instance.addPostFrameCallback(
+            (_) => store.navigate(Section.review, document: id),
+          ),
         ),
         SizedBox(height: 22),
         AdaptiveColumns(
