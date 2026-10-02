@@ -15,7 +15,6 @@ class DiaryWeather extends StatefulWidget {
 
 class _DiaryWeatherState extends State<DiaryWeather> {
   bool busy = false;
-  final inputs = <String, TextEditingController>{};
   static const labels = {
     'condicao': 'Condição',
     'temperaturaC': 'Temperatura (°C)',
@@ -23,25 +22,17 @@ class _DiaryWeatherState extends State<DiaryWeather> {
     'ventoKmh': 'Vento (km/h)',
     'precipitacaoMm': 'Chuva (mm)',
   };
-  @override
-  void dispose() {
-    for (final c in inputs.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
 
   /// [suggestion] é o clima consultado automaticamente: o usuário confirma ou corrige antes de salvar.
   Future<void> edit({Map<String, dynamic>? suggestion}) async {
-    for (final c in inputs.values) {
-      c.dispose();
-    }
-    inputs.clear();
-    for (final k in labels.keys) {
-      inputs[k] = TextEditingController(
-        text: '${(suggestion ?? widget.entry.weather)[k] ?? ''}',
-      );
-    }
+    // Os controllers pertencem a este diálogo: ficam locais e são descartados só depois da animação de
+    // saída, e não mais pela página (que podia sair da tela com o diálogo ainda aberto).
+    final inputs = <String, TextEditingController>{
+      for (final k in labels.keys)
+        k: TextEditingController(
+          text: '${(suggestion ?? widget.entry.weather)[k] ?? ''}',
+        ),
+    };
     String? error;
     final values = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -119,11 +110,13 @@ class _DiaryWeatherState extends State<DiaryWeather> {
                 if (suggestion != null) {
                   final corrected = labels.keys.any((k) {
                     final a = suggestion[k], b = result[k];
-                    if (a is num && b is num) return a.toDouble() != b.toDouble();
+                    if (a is num && b is num)
+                      return a.toDouble() != b.toDouble();
                     return a != b;
                   });
                   result['corrigidoPeloUsuario'] = corrected;
-                  if (!corrected) result['tokenConsulta'] = suggestion['tokenConsulta'];
+                  if (!corrected)
+                    result['tokenConsulta'] = suggestion['tokenConsulta'];
                 } else {
                   result['corrigidoPeloUsuario'] = true;
                 }
@@ -135,6 +128,11 @@ class _DiaryWeatherState extends State<DiaryWeather> {
         ),
       ),
     );
+    Future<void>.delayed(const Duration(milliseconds: 500), () {
+      for (final c in inputs.values) {
+        c.dispose();
+      }
+    });
     if (values == null || !mounted) return;
     setState(() => busy = true);
     await runAction(
