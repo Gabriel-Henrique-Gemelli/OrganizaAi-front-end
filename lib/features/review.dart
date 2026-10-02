@@ -215,6 +215,16 @@ class _ReviewPageState extends State<ReviewPage> {
                                 success: 'Conferência salva.',
                               );
                               if (mounted) setState(() => saving = false);
+                              // Conferido: segue para o próximo pendente ou, sem nenhum, para o acervo.
+                              if (mounted && d.reviewed) {
+                                final next = store.reviews.firstOrNull;
+                                store.navigate(
+                                  next == null
+                                      ? Section.archive
+                                      : Section.review,
+                                  document: next?.id,
+                                );
+                              }
                             },
                       child: Text(saving ? 'SALVANDO…' : 'CONFIRMAR LEITURA'),
                     ),
