@@ -203,7 +203,7 @@ class _DiaryPageState extends State<DiaryPage> {
                                     firstDate: DateTime(2020),
                                     lastDate: DateTime.now(),
                                   );
-                                  if (d != null) setState(() => date = d);
+                                  if (d != null && mounted) setState(() => date = d);
                                 },
                           icon: Icon(Icons.calendar_today_outlined, size: 17),
                           label: Text('Alterar'),

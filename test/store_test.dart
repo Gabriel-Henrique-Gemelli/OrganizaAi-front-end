@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
+import 'package:organizai_flutter/core/error_handling.dart';
 import 'package:organizai_flutter/data/api_client.dart';
 import 'package:organizai_flutter/data/app_store.dart';
 import 'package:organizai_flutter/data/models.dart';
@@ -408,5 +409,58 @@ void main() {
     expect(s.projects.single.name, 'Obra de teste');
     expect(s.company, '');
     s.dispose();
+  });
+  test('401 do servidor encerra a sessão uma vez e volta para a tela de entrada', () async {
+    var recusar = false;
+    final adapter = FakeAdapter((r) async {
+      if (recusar) return jsonResponse({}, 401);
+      return jsonResponse(base(r) ?? {});
+    });
+    final s = harness(adapter);
+    await s.connect(session());
+    expect(s.started, true);
+
+    recusar = true;
+    await expectLater(s.synchronize(), throwsA(isA<ApiFailure>()));
+
+    expect(s.session, isNull);
+    expect(s.started, false);
+    expect(s.token, '');
+    // Um segundo pedido com a sessão já encerrada falha com aviso de nova entrada, sem lançar outro tipo de erro.
+    await expectLater(
+      s.synchronize(),
+      throwsA(isA<ApiFailure>().having((e) => e.message, 'message', contains('Entre novamente'))),
+    );
+    s.dispose();
+  });
+  test('Falha de disco ao persistir é registrada e não propaga', () async {
+    final dir = await Directory.systemTemp.createTemp('organizai_hive_falha');
+    Hive.init(dir.path);
+    final box = await Hive.openBox('disco_falhando');
+    final adapter = fake((r) async => jsonResponse({}, 500));
+    final s = AppStore(
+      box: box,
+      apiFactory: (url, token) => ApiClient(
+        url,
+        client: Dio(BaseOptions(baseUrl: url))..httpClientAdapter = adapter,
+        uploadClient: Dio()..httpClientAdapter = adapter,
+      ),
+    )..baseUrl = 'https://api.example';
+    await s.connect(session());
+    AppErrors.recent.clear();
+    await box.close();
+
+    await s.selectProject(projectId);
+
+    expect(AppErrors.recent.any((e) => e.origin == 'persistencia'), isTrue);
+    s.dispose();
+    await dir.delete(recursive: true);
+  });
+  test('Notificar depois do dispose (timer atrasado) não lança', () async {
+    final s = harness(fake((r) async => jsonResponse({}, 500)));
+    await s.connect(session());
+    s.dispose();
+
+    expect(() => s.navigate(Section.archive), returnsNormally);
   });
 }
