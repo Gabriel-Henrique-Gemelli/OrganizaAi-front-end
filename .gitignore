@@ -20,3 +20,4 @@ config.local.json
 .idea/
 .metadata
 *.iml
+pubspec.lock
